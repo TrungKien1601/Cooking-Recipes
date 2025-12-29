@@ -1,0 +1,84 @@
+name: cooking_recipes_books
+description: AI project
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0" # Quay lại SDK mới để hỗ trợ TypeAhead mới
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # --- UI & ICONS ---
+  cupertino_icons: ^1.0.8
+  font_awesome_flutter: ^10.7.0
+  google_fonts: ^6.3.2
+  auto_size_text: ^3.0.0
+  cached_network_image: ^3.4.1
+  flutter_animate: ^4.5.0
+  horizontal_picker: ^1.2.0
+  percent_indicator: ^4.2.3
+  table_calendar: ^3.1.2
+  
+  # --- CẶP ĐÔI QUAN TRỌNG ĐÃ SỬA ---
+  # Bản 5.2.0 đi kèm với keyboard_visibility 6.0.0 -> Hết lỗi Namespace
+  flutter_typeahead: ^5.2.0 
+  # Không cần khai báo flutter_keyboard_visibility, nó tự đi theo typeahead
+
+  # --- CHARTS ---
+  fl_chart: ^1.1.1 
+
+  # --- UTILITIES ---
+  intl: any 
+  path_provider: ^2.1.5
+  shared_preferences: ^2.3.2
+  timeago: ^3.7.0
+  url_launcher: ^6.3.0
+  
+  # --- NAVIGATION & STATE ---
+  provider: ^6.1.2
+  go_router: ^14.2.0 
+
+  # --- DATABASE ---
+  sqflite: ^2.3.3+1
+
+  # --- AUTH & GOOGLE ---
+  google_sign_in: ^6.2.1
+  google_generative_ai: ^0.4.7
+  mobile_scanner: ^3.5.7
+  pinput: ^3.0.0
+  barcode_scanner: ^7.1.2
+  image_picker: ^1.2.1
+  camera: ^0.11.3
+  flutter_image_compress: ^2.4.0
+  http_parser: ^4.1.2
+  youtube_player_flutter: ^9.1.3
+  dio: ^5.9.0
+  gal: ^2.3.2
+  permission_handler: ^12.0.1
+  youtube_explode_dart: ^3.0.5
+  video_player: ^2.10.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_launcher_icons: ^0.13.1 
+  change_app_package_name: ^1.1.0
+
+# --- CHỐT CHẶN CUỐI CÙNG ---
+dependency_overrides:
+  http: ^1.6.0
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo.png"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icon/

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "585893940244",
+    "project_id": "gen-lang-client-0768165014",
+    "storage_bucket": "gen-lang-client-0768165014.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:585893940244:android:5049feda40f645f0b5ab01",
+        "android_client_info": {
+          "package_name": "com.doan.cooking_recipes"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "585893940244-5um39u5ofcbakv8fce4jcl1d93fdf8fg.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.doan.cooking_recipes",
+            "certificate_hash": "8787f96ca990e184de386c2f3f257ef389cf94a9"
+          }
+        },
+        {
+          "client_id": "585893940244-7rfnv6lfm29dkclmqdgbangf4i4u1fmm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDJ93_4hz_R1RN1qnwgr820n2ZMpt-PPzw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "585893940244-7rfnv6lfm29dkclmqdgbangf4i4u1fmm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

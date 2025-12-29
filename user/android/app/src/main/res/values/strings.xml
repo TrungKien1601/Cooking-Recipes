@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dán mã WEB CLIENT ID của bạn vào đây (cái đuôi .apps.googleusercontent.com) -->
+    <string name="default_web_client_id">579746797348-l9tht58g9c99bu4r05mu8jj47ued03os.apps.googleusercontent.com</string>
+</resources>

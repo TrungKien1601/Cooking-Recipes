@@ -1,0 +1,11 @@
+# Dependencies
+node_modules/
+
+# Production
+build/
+dist/
+
+# Environment Variables (Cực quan trọng, chứa mật khẩu DB)
+.env
+.env.local
+.DS_Store
