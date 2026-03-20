@@ -330,7 +330,7 @@ export default function Tags() {
                       <TableCell isHeader className="w-[35%] px-5 py-3 font-medium text-gray-500 text-start text-theme-sm dark:text-gray-400">Tên thẻ</TableCell>
                       <TableCell isHeader className="w-[30%] px-5 py-3 font-medium text-gray-500 text-center text-theme-sm dark:text-gray-400">Loại thẻ</TableCell>
                       <TableCell isHeader className="w-[20%] px-5 py-3 font-medium text-gray-500 text-center text-theme-sm dark:text-gray-400">Ngày tạo</TableCell>
-                      <TableCell isHeader className="w-[10%] px-5 py-3 font-medium text-gray-500 text-start text-theme-sm dark:text-gray-400">Chi tiết</TableCell>
+                      <TableCell isHeader className="w-[10%] px-5 py-3 font-medium text-gray-500 text-start text-theme-sm dark:text-gray-400"></TableCell>
                     </TableRow>
                   </TableHeader>
 

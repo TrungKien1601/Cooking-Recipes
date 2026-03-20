@@ -3,7 +3,7 @@ const router = express.Router();
 const AdminController = require('../../controllers/admin/admin.controller')
 
 const JwtUtil = require('../../utils/JwtUtils');
-const UploadPicture = require('../../config/multer');
+const { uploadImage } = require('../../config/multer');
 
 //Đăng nhập
 router.post('/signin', AdminController.sigin);
@@ -26,7 +26,7 @@ router.put('/update-user', JwtUtil.checkToken, AdminController.updateUser);
 
 
 //xử lý hình ảnh
-router.put('/upload-avatar', JwtUtil.checkToken, UploadPicture.single('image'), AdminController.uploadAvatar);
+router.put('/upload-avatar', JwtUtil.checkToken, uploadImage.single('image'), AdminController.uploadAvatar);
 
 
 module.exports = router;

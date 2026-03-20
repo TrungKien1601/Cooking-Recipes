@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'login_screen.dart';
-import 'otp_screen.dart'; 
+import 'otp_screen.dart';
 import '../services/auth_service.dart';
 
 class SignUpScreen extends StatefulWidget {
@@ -46,23 +46,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
     setState(() => _isLoading = true);
 
     final authService = AuthService();
-  
+
     // Vì AuthService.sendOtp bây giờ dùng named parameter {email, phone, type}
     bool isSent = await authService.sendOtp(
-      email: _emailController.text.trim(), 
-      type: 'register'
-    );
+        email: _emailController.text.trim(), type: 'register');
 
     setState(() => _isLoading = false);
 
     if (isSent) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Mã OTP đã được gửi! Vui lòng kiểm tra email."), 
-          backgroundColor: Colors.green
-        )
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Mã OTP đã được gửi! Vui lòng kiểm tra email."),
+          backgroundColor: Colors.green));
 
       // Chuyển sang trang OTP
       Navigator.push(
@@ -73,19 +68,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
             password: _passwordController.text.trim(),
             fullName: _nameController.text.trim(),
             // Vẫn truyền phone sang để lưu vào DB khi xác thực xong
-            phone: _phoneController.text.trim(), 
+            phone: _phoneController.text.trim(),
             isForgotPassword: false,
           ),
         ),
       );
     } else {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Email này đã tồn tại hoặc lỗi hệ thống."), 
-          backgroundColor: Colors.red
-        )
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Email này đã tồn tại hoặc lỗi hệ thống."),
+          backgroundColor: Colors.red));
     }
   }
 
@@ -105,16 +97,27 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text('Create Account', textAlign: TextAlign.center, style: GoogleFonts.interTight(fontSize: 32.0, fontWeight: FontWeight.bold, color: Colors.black87)),
+                        Text('Tạo tài khoản',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.interTight(
+                                fontSize: 32.0,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87)),
                         const SizedBox(height: 8),
-                        Text('Join us to explore delicious recipes!', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 16.0, color: secondaryTextColor)),
+                        Text(
+                            'Tham gia cùng chúng tôi để tìm ra những công thức ngon!',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.inter(
+                                fontSize: 16.0, color: secondaryTextColor)),
                         const SizedBox(height: 30),
 
                         // Full Name
                         TextFormField(
                           controller: _nameController,
-                          validator: (val) => val!.isEmpty ? "Vui lòng nhập họ tên" : null,
-                          decoration: _buildInputDecoration('Full Name', Icons.person_outline),
+                          validator: (val) =>
+                              val!.isEmpty ? "Vui lòng nhập họ tên" : null,
+                          decoration: _buildInputDecoration(
+                              'Họ và tên', Icons.person_outline),
                         ),
                         const SizedBox(height: 16),
 
@@ -122,8 +125,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
-                          validator: (val) => (!val!.contains('@gmail.com')) ? "Email không hợp lệ" : null,
-                          decoration: _buildInputDecoration('Email', Icons.email_outlined),
+                          validator: (val) => (!val!.contains('@gmail.com'))
+                              ? "Email không hợp lệ"
+                              : null,
+                          decoration: _buildInputDecoration(
+                              'Email', Icons.email_outlined),
                         ),
                         const SizedBox(height: 16),
 
@@ -131,8 +137,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         TextFormField(
                           controller: _phoneController,
                           keyboardType: TextInputType.phone,
-                          validator: (val) => (val!.isEmpty || val.length < 9 ) ? "Số điện thoại không hợp lệ" : null,
-                          decoration: _buildInputDecoration('Phone Number', Icons.phone_outlined),
+                          validator: (val) => (val!.isEmpty || val.length < 9)
+                              ? "Số điện thoại không hợp lệ"
+                              : null,
+                          decoration: _buildInputDecoration(
+                              'Số điện thoại', Icons.phone_outlined),
                         ),
                         const SizedBox(height: 16),
 
@@ -140,11 +149,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         TextFormField(
                           controller: _passwordController,
                           obscureText: !_passwordVisible,
-                          validator: (val) => val!.length < 6 ? "Mật khẩu phải hơn 6 ký tự" : null,
-                          decoration: _buildInputDecoration('Password', Icons.lock_outline).copyWith(
+                          validator: (val) => val!.length < 6
+                              ? "Mật khẩu phải hơn 6 ký tự"
+                              : null,
+                          decoration: _buildInputDecoration(
+                                  'Mật khẩu', Icons.lock_outline)
+                              .copyWith(
                             suffixIcon: IconButton(
-                              icon: Icon(_passwordVisible ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: secondaryTextColor),
-                              onPressed: () => setState(() => _passwordVisible = !_passwordVisible),
+                              icon: Icon(
+                                  _passwordVisible
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  color: secondaryTextColor),
+                              onPressed: () => setState(
+                                  () => _passwordVisible = !_passwordVisible),
                             ),
                           ),
                         ),
@@ -154,11 +172,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         TextFormField(
                           controller: _confirmPassController,
                           obscureText: !_confirmPasswordVisible,
-                          validator: (val) => val != _passwordController.text ? "Mật khẩu không khớp" : null,
-                          decoration: _buildInputDecoration('Confirm Password', Icons.lock_outline).copyWith(
+                          validator: (val) => val != _passwordController.text
+                              ? "Mật khẩu không khớp"
+                              : null,
+                          decoration: _buildInputDecoration(
+                                  'Xác nhận lại mật khẩu', Icons.lock_outline)
+                              .copyWith(
                             suffixIcon: IconButton(
-                              icon: Icon(_confirmPasswordVisible ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: secondaryTextColor),
-                              onPressed: () => setState(() => _confirmPasswordVisible = !_confirmPasswordVisible),
+                              icon: Icon(
+                                  _confirmPasswordVisible
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  color: secondaryTextColor),
+                              onPressed: () => setState(() =>
+                                  _confirmPasswordVisible =
+                                      !_confirmPasswordVisible),
                             ),
                           ),
                         ),
@@ -166,8 +194,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                         ElevatedButton(
                           onPressed: _handleSignUp,
-                          style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: whiteColor, padding: const EdgeInsets.symmetric(vertical: 16.0), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)), elevation: 3.0),
-                          child: Text('Sign Up', style: GoogleFonts.inter(fontSize: 16.0, fontWeight: FontWeight.w600)),
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryColor,
+                              foregroundColor: whiteColor,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 16.0),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12.0)),
+                              elevation: 3.0),
+                          child: Text('Đăng ký',
+                              style: GoogleFonts.inter(
+                                  fontSize: 16.0, fontWeight: FontWeight.w600)),
                         ),
 
                         const SizedBox(height: 24),
@@ -175,10 +212,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text('Already have an account?  ', style: GoogleFonts.inter(color: secondaryTextColor)),
+                            Text('Bạn đã có tài khoản?  ',
+                                style: GoogleFonts.inter(
+                                    color: secondaryTextColor)),
                             InkWell(
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen())),
-                              child: Text('Login', style: GoogleFonts.inter(color: primaryColor, fontWeight: FontWeight.w600)),
+                              onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (context) =>
+                                          const LoginScreen())),
+                              child: Text('Đăng nhập',
+                                  style: GoogleFonts.inter(
+                                      color: primaryColor,
+                                      fontWeight: FontWeight.w600)),
                             ),
                           ],
                         ),
@@ -193,11 +239,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   InputDecoration _buildInputDecoration(String label, IconData icon) {
     return InputDecoration(
-      labelText: label, labelStyle: GoogleFonts.inter(color: secondaryTextColor), filled: true, fillColor: whiteColor, prefixIcon: Icon(icon, color: secondaryTextColor),
-      enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: textFieldBorderColor, width: 2.0), borderRadius: BorderRadius.circular(12.0)),
-      focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: primaryColor, width: 2.0), borderRadius: BorderRadius.circular(12.0)),
-      errorBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.red.shade400, width: 2.0), borderRadius: BorderRadius.circular(12.0)),
-      focusedErrorBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.red.shade400, width: 2.0), borderRadius: BorderRadius.circular(12.0)),
+      labelText: label,
+      labelStyle: GoogleFonts.inter(color: secondaryTextColor),
+      filled: true,
+      fillColor: whiteColor,
+      prefixIcon: Icon(icon, color: secondaryTextColor),
+      enabledBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: textFieldBorderColor, width: 2.0),
+          borderRadius: BorderRadius.circular(12.0)),
+      focusedBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: primaryColor, width: 2.0),
+          borderRadius: BorderRadius.circular(12.0)),
+      errorBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: Colors.red.shade400, width: 2.0),
+          borderRadius: BorderRadius.circular(12.0)),
+      focusedErrorBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: Colors.red.shade400, width: 2.0),
+          borderRadius: BorderRadius.circular(12.0)),
     );
   }
 }

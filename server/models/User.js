@@ -30,6 +30,7 @@ const userSchema = new mongoose.Schema({
   role: {
     type: Number,
     ref: 'Role',
+    default:3,
     required: true,
   },
   isSurveyDone: {

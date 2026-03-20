@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-// 👇 Import Service và các màn hình liên quan
 import '../services/recipe_service.dart';
-import 'blog_screen.dart';
+import '../recipe/blog_screen.dart';
 import 'add_recipe_screen.dart';
 import 'update_recipe_screen.dart'; 
 import '../home/homepage_screen.dart';
@@ -50,7 +49,12 @@ class _MyRecipeScreenState extends State<MyRecipeScreen> {
         return;
       }
 
-      final result = await RecipeService.getAllRecipes(authorId: userId);
+      // Gọi API lấy bài của chính user này
+      final result = await RecipeService.getAllRecipes(
+        authorId: userId,
+        excludeAi: true,
+        limit: 100, // Lấy nhiều chút
+      );
 
       if (mounted) {
         setState(() {
@@ -79,7 +83,7 @@ class _MyRecipeScreenState extends State<MyRecipeScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () {
-            // Thay vì pop, ta chuyển hướng hẳn về HomePage
+            // Thay vì pop, ta chuyển hướng hẳn về HomePage để tránh lỗi stack
             Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(builder: (context) => const HomePage()),
@@ -174,9 +178,9 @@ class _MyRecipeScreenState extends State<MyRecipeScreen> {
     String title = recipe['name'] ?? "Chưa đặt tên";
     String id = recipe['_id'];
 
+    // Xử lý ảnh: Nếu là path upload (không phải http) thì nối thêm domain
     String imageUrl = recipe['image'] ?? "";
     if (imageUrl.isNotEmpty && !imageUrl.startsWith('http')) {
-      // Ensure there is a slash between domain and path if missing
       if (!imageUrl.startsWith('/')) {
         imageUrl = "${RecipeService.domain}/$imageUrl";
       } else {
@@ -188,6 +192,7 @@ class _MyRecipeScreenState extends State<MyRecipeScreen> {
         ? "${recipe['cookTimeMinutes']} phút"
         : "30 phút";
 
+    // Trạng thái bài viết
     String status = recipe['status'] ?? "Chờ duyệt";
 
     return GestureDetector(
@@ -197,14 +202,19 @@ class _MyRecipeScreenState extends State<MyRecipeScreen> {
             context,
             MaterialPageRoute(
                 builder: (context) => BlogScreen(recipeData: {
+                      
+                      ...recipe, 
+                  
                       'name': title,
-                      'image': imageUrl, // Truyền URL đã xử lý
+                      'image': imageUrl, // URL đã nối domain
+                      'time': time,      // Thời gian đã format
+                      'isOwner': true,   // Đánh dấu là chủ sở hữu
+                      
+                      // Đảm bảo fallback
                       'description': recipe['description'] ?? "",
-                      'time': time,
-                      'calories': recipe['nutritionAnalysis']?['calories'] ?? 0,
                       'ingredients': recipe['ingredients'] ?? [],
-                      'instructions': recipe['steps'] ?? [],
-                    })));
+                      'instructions': recipe['steps'] ?? recipe['instructions'] ?? [],
+                    }))).then((_) => _fetchMyRecipes());
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
@@ -271,7 +281,7 @@ class _MyRecipeScreenState extends State<MyRecipeScreen> {
                             ),
                           ),
                         ),
-                        // 👇 MENU (SỬA / XÓA) - ĐÃ CẬP NHẬT
+                        // Menu (Sửa / Xóa)
                         PopupMenuButton<String>(
                           icon: const Icon(Icons.more_horiz,
                               size: 20, color: Colors.grey),
@@ -279,7 +289,7 @@ class _MyRecipeScreenState extends State<MyRecipeScreen> {
                             if (value == 'delete') {
                               _confirmDelete(id);
                             } else if (value == 'edit') {
-                              // ✅ LOGIC SỬA BÀI VIẾT
+                              // LOGIC SỬA BÀI VIẾT
                               final result = await Navigator.push(
                                 context,
                                 MaterialPageRoute(

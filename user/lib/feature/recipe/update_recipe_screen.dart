@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart';
 // 👇 Import Service
 import '../services/recipe_service.dart';
 
-// --- ĐỒNG BỘ MÀU SẮC VỚI ADD RECIPE ---
+// --- ĐỒNG BỘ MÀU SẮC ---
 const Color kColorBackground = Color(0xFFF1F4F8);
 const Color kColorAppBar = Color(0xFFFFFFFF);
 const Color kColorCard = Color(0xFFFFFFFF);
@@ -64,7 +64,7 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
   late TextEditingController _shortDescController;
-  late TextEditingController _descriptionController; // Dùng cho Steps
+  late TextEditingController _descriptionController; // Dùng cho Steps (Cách làm)
   late TextEditingController _videoUrlController;
 
   File? _newImageFile;
@@ -72,6 +72,11 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
 
   String? _selectedTime;
   String? _selectedServings;
+  
+  // ✅ MỚI: Thêm độ khó
+  String? _selectedDifficulty;
+  final List<String> _difficultyOptions = ['Dễ', 'Trung bình', 'Khó'];
+
   final List<IngredientController> _ingredientRows = [];
 
   // Dữ liệu dinh dưỡng
@@ -86,11 +91,11 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
     _nameController = TextEditingController(
         text: widget.recipe['name'] ?? widget.recipe['title']);
 
-    // Fill mô tả cũ
+    // Fill mô tả ngắn
     _shortDescController =
         TextEditingController(text: widget.recipe['description'] ?? '');
 
-    // Fill Video URL cũ (nếu là link youtube)
+    // Fill Video URL cũ
     String currentVideo = "";
     if (widget.recipe['video'] != null) {
         if (widget.recipe['video'] is String) {
@@ -99,38 +104,44 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
             currentVideo = widget.recipe['video']['url'] ?? "";
         }
     }
-    // Nếu video hiện tại là link youtube thì điền vào controller, nếu là file upload thì để trống (để hiển thị placeholder)
-    if (currentVideo.contains('http') && !currentVideo.contains('/uploads/')) {
+    // Nếu là link http (Youtube/Tiktok...) thì điền vào ô text, nếu là path file upload thì để trống
+    if (currentVideo.startsWith('http') && !currentVideo.contains('/uploads/')) {
          _videoUrlController = TextEditingController(text: currentVideo);
     } else {
          _videoUrlController = TextEditingController();
     }
 
-
     // 2. Fill Steps
     String stepsText = "";
     if (widget.recipe['steps'] != null && widget.recipe['steps'] is List) {
       List<dynamic> steps = widget.recipe['steps'];
-      stepsText = steps.map((s) => s['description'] ?? "").join("\n");
+      // Backend trả về mảng object { description: "..." }
+      stepsText = steps.map((s) => s['description'] ?? s.toString()).join("\n");
     }
     _descriptionController = TextEditingController(text: stepsText);
 
     // 3. Fill Thời gian
-    String? oldTime = widget.recipe['cookTimeMinutes'] != null
-        ? _convertMinutesToOption(widget.recipe['cookTimeMinutes'])
-        : widget.recipe['time'];
+    String? oldTime;
+    if (widget.recipe['cookTimeMinutes'] != null) {
+        oldTime = _convertMinutesToOption(widget.recipe['cookTimeMinutes']);
+    } else {
+        oldTime = widget.recipe['time'];
+    }
 
     if (kTimeOptions.contains(oldTime)) {
       _selectedTime = oldTime;
     } else {
-      _selectedTime = kTimeOptions[1];
+      _selectedTime = kTimeOptions[1]; // Default 15-30p
     }
 
     // 4. Fill Khẩu phần
     int servingsNum = widget.recipe['servings'] ?? 2;
     _selectedServings = "$servingsNum người";
+    
+    // 5. Fill Độ khó
+    _selectedDifficulty = widget.recipe['difficulty'] ?? 'Trung bình';
 
-    // 5. Fill Nguyên liệu
+    // 6. Fill Nguyên liệu
     if (widget.recipe['ingredients'] != null) {
       List<dynamic> oldIngredients = widget.recipe['ingredients'];
       for (var item in oldIngredients) {
@@ -143,7 +154,7 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
       _addIngredientRow();
     }
 
-    // 6. Fill Dinh dưỡng
+    // 7. Fill Dinh dưỡng
     _nutritionData = widget.recipe['nutritionAnalysis'];
   }
 
@@ -249,28 +260,32 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
       setState(() => _isLoading = true);
 
       try {
-        // 1. Xử lý Video (Ưu tiên File mới -> Link mới -> Giữ nguyên cũ)
+        // 1. Xử lý Video Logic:
+        // - Nếu có File mới -> Upload lấy path mới.
+        // - Nếu có Link URL mới -> Dùng link đó.
+        // - Nếu cả 2 trống -> Giữ nguyên video cũ.
+        
         String? finalVideoPath;
         
         if (_newVideoFile != null) {
-            // Case 1: Có file video mới -> Upload
+            // Case 1: Upload video mới
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đang tải video lên...")));
             finalVideoPath = await RecipeService.uploadVideo(_newVideoFile!);
             if (finalVideoPath == null) throw "Lỗi upload video";
         } else if (_videoUrlController.text.isNotEmpty) {
-            // Case 2: Có link youtube mới
+            // Case 2: Link Youtube mới
             finalVideoPath = _videoUrlController.text;
         } else {
-            // Case 3: Giữ nguyên video cũ (nếu không thay đổi gì)
-            // Lấy lại giá trị cũ từ widget.recipe['video']
-             if (widget.recipe['video'] is String) {
+            // Case 3: Giữ nguyên video cũ
+            // Cẩn thận: Backend trả về object hoặc string, cần parse lại path chuẩn
+            if (widget.recipe['video'] is String) {
                 finalVideoPath = widget.recipe['video'];
             } else if (widget.recipe['video'] is Map) {
                 finalVideoPath = widget.recipe['video']['url'];
             }
         }
 
-        // 2. Các phần còn lại giữ nguyên
+        // 2. Map Ingredients
         final ingredients = _ingredientRows.map((row) {
           return {
             'name': row.name.text,
@@ -279,19 +294,20 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
           };
         }).toList();
 
+        // 3. Map Steps
         List<Map<String, String>> steps = _descriptionController.text
             .split('\n')
             .where((s) => s.trim().isNotEmpty)
             .map((s) => {"description": s.trim()})
             .toList();
 
+        // 4. Map Time
         int cookTime = 30;
-        if (_selectedTime == 'Dưới 15 phút')
-          cookTime = 15;
-        else if (_selectedTime == '30-60 phút')
-          cookTime = 60;
+        if (_selectedTime == 'Dưới 15 phút') cookTime = 15;
+        else if (_selectedTime == '30-60 phút') cookTime = 60;
         else if (_selectedTime == 'Trên 1 giờ') cookTime = 90;
 
+        // 5. Map Servings
         int servings = int.tryParse(_selectedServings!.split(' ')[0]) ?? 2;
 
         final updateData = {
@@ -301,10 +317,13 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
               : _nameController.text, 
           "servings": servings,
           "cookTimeMinutes": cookTime,
+          "difficulty": _selectedDifficulty ?? 'Trung bình', // Gửi độ khó
           "ingredients": ingredients,
           "steps": steps,
-          "video": finalVideoPath, // ✅ Cập nhật đường dẫn video
+          "video": finalVideoPath, // Path video đã xử lý
           "nutritionAnalysis": _nutritionData,
+          // Lưu ý: Tags nếu không sửa thì Backend giữ nguyên (nhờ logic của Mongoose $set)
+          // Hoặc bạn có thể thêm UI sửa tags nếu cần thiết.
         };
 
         final result = await RecipeService.updateRecipe(
@@ -394,6 +413,16 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    
+                    // ✅ Dropdown Độ khó
+                    _buildDropdownField(
+                        label: 'Độ khó',
+                        value: _selectedDifficulty,
+                        items: _difficultyOptions,
+                        onChanged: (v) => setState(() => _selectedDifficulty = v),
+                    ),
+
                     const SizedBox(height: 20),
                     _buildSectionTitle('Nguyên liệu'),
                     _buildIngredientList(),
@@ -417,7 +446,7 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
                     const SizedBox(height: 20),
 
                     _buildSectionTitle('Video hướng dẫn'),
-                    // ✅ GIAO DIỆN CHỌN VIDEO
+                    // ✅ Widget chọn video
                     _buildVideoSelectionSection(),
 
                     const SizedBox(height: 20),
@@ -457,7 +486,7 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
         TextFormField(
           controller: _videoUrlController,
           keyboardType: TextInputType.url,
-          // Nếu nhập link thì xoá file đã chọn
+          // Nếu nhập link thì xoá file đã chọn để tránh conflict
           onChanged: (value) {
             if (value.isNotEmpty && _newVideoFile != null) {
               setState(() => _newVideoFile = null);
@@ -470,7 +499,7 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
             fillColor: kColorCard,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            enabled: _newVideoFile == null, // Disable nếu đã chọn file
+            enabled: _newVideoFile == null, // Disable nhập link nếu đã chọn file
             border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: kColorBorder)),
@@ -565,7 +594,10 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
     } else {
       String? oldUrl = widget.recipe['image'];
       if (oldUrl != null && oldUrl.isNotEmpty) {
-        if (oldUrl.startsWith('/')) oldUrl = "${RecipeService.domain}$oldUrl";
+        if (!oldUrl.startsWith('http')) {
+             if (oldUrl.startsWith('/')) oldUrl = oldUrl.substring(1);
+             oldUrl = "${RecipeService.domain}/$oldUrl";
+        }
         bgImage = NetworkImage(oldUrl);
       }
     }
@@ -669,7 +701,7 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
     required Function(String?) onChanged,
   }) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       items: items
           .map((e) => DropdownMenuItem(
               value: e, child: Text(e, style: const TextStyle(fontSize: 14))))
@@ -697,7 +729,6 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
     );
   }
 
-  // ✅ WIDGET DINH DƯỠNG (Đồng bộ Add Recipe)
   Widget _buildNutritionSection() {
     int servings = int.tryParse(_selectedServings?.split(' ')[0] ?? "1") ?? 1;
     if (servings < 1) servings = 1;
@@ -750,11 +781,9 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
                 _buildPieChartLegend(),
                 const Divider(height: 30),
 
-                // Hiển thị Header
                 _buildHeaderRow(),
                 const SizedBox(height: 8),
 
-                // Hiển thị dữ liệu chia cột
                 _buildNutritionRow(
                     'Calories', _nutritionData!['calories'], 'kcal', servings),
                 _buildNutritionRow(
@@ -793,7 +822,6 @@ class _UpdateRecipeScreenState extends State<UpdateRecipeScreen> {
     );
   }
 
-  // --- CÁC HELPER CHO DINH DƯỠNG ---
   Widget _buildHeaderRow() {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),

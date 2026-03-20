@@ -27,6 +27,9 @@ class OtpScreen extends StatefulWidget {
 
 class _OtpScreenState extends State<OtpScreen> {
   final TextEditingController _otpController = TextEditingController();
+  // Khởi tạo Service 1 lần (Singleton)
+  final AuthService _authService = AuthService();
+  
   bool _isLoading = false;
 
   // --- TIMER VARIABLES ---
@@ -78,27 +81,28 @@ class _OtpScreenState extends State<OtpScreen> {
     return "$minutes:$seconds";
   }
 
-  // --- HÀM GỬI LẠI MÃ  ---
+  // --- HÀM GỬI LẠI MÃ ---
   Future<void> _handleResendOtp() async {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Đang gửi lại mã...")),
     );
 
-    final authService = AuthService();
-    bool isSent;
     String type = widget.isForgotPassword ? 'forgot' : 'register';
     
-    isSent = await authService.sendOtp(email: widget.email, type: type);
+    // Gọi qua instance _authService đã khai báo
+    bool isSent = await _authService.sendOtp(email: widget.email, type: type);
 
     if (isSent) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Đã gửi mã mới qua ${ 'Email' }!"),
+        const SnackBar(
+          content: Text("Đã gửi mã mới qua Email!"),
           backgroundColor: Colors.green,
         ),
       );
       startTimer();
     } else {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Gửi lại thất bại. Vui lòng thử lại sau."), backgroundColor: Colors.red),
       );
@@ -116,6 +120,7 @@ class _OtpScreenState extends State<OtpScreen> {
       return;
     }
 
+    // CASE 1: QUÊN MẬT KHẨU
     if (widget.isForgotPassword) {
       Navigator.push(
         context,
@@ -129,21 +134,22 @@ class _OtpScreenState extends State<OtpScreen> {
       return;
     }
 
+    // CASE 2: ĐĂNG KÝ MỚI
     setState(() => _isLoading = true);
 
-    final result = await AuthService().verifyAndRegister(
-      widget.email,
-      widget.password ?? "",
-      widget.fullName ?? "",
-      widget.phone ?? "",
-      inputOtp,
-    );
+    // 🔥 SỬA QUAN TRỌNG: Truyền Map thay vì tham số rời rạc
+    // Backend/Service mới mong đợi key 'username' thay vì 'fullName'
+    final result = await _authService.verifyAndRegister({
+      'email': widget.email,
+      'password': widget.password,
+      'username': widget.fullName, 
+      'phone': widget.phone,
+      'otp': inputOtp,
+    });
 
     setState(() => _isLoading = false);
 
     if (result['success'] == true) {
-      String userId = result['userId'];
-      String token = result['token'];
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -159,7 +165,7 @@ class _OtpScreenState extends State<OtpScreen> {
     } else {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Mã OTP không đúng hoặc lỗi Server!")),
+        SnackBar(content: Text(result['message'] ?? "Mã OTP không đúng hoặc lỗi Server!")),
       );
     }
   }
@@ -167,9 +173,7 @@ class _OtpScreenState extends State<OtpScreen> {
   @override
   Widget build(BuildContext context) {
     final Color primaryColor = const Color(0xFF568C4C);
-    
-    // Text hiển thị
-    final String sentTo =  widget.email ;
+    final String sentTo = widget.email;
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),

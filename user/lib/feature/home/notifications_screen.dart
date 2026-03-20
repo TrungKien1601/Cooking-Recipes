@@ -1,8 +1,6 @@
-import 'package:cooking_recipes_books/feature/recipe/blog_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/recipe_service.dart';
-// import '../recipe/blog_screen.dart'; // Đảm bảo import đúng đường dẫn
 
 // --- CONSTANTS ---
 const Color kPrimaryBackground = Color(0xFFF1F4F8);
@@ -53,9 +51,10 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     }
   }
 
-  // --- LOGIC BẤM VÀO THÔNG BÁO (CHỈ XEM, KHÔNG XÓA) ---
+  // --- LOGIC BẤM VÀO THÔNG BÁO ---
+  // Chỉ đánh dấu đã đọc và chuyển trang, KHÔNG XÓA khỏi list
   Future<void> _onNotificationTap(Map<String, dynamic> notification) async {
-    // 1. Đánh dấu đã đọc trên UI ngay lập tức
+    // 1. Đánh dấu đã đọc trên UI ngay lập tức (đổi icon)
     if (notification['isRead'] == false) {
       setState(() {
         notification['isRead'] = true;
@@ -73,8 +72,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     if (!mounted) return;
 
     if (result['success'] == true && result['data'] != null) {
-      // Chuyển trang
-      // Navigator.push(context, MaterialPageRoute(builder: (_) => BlogScreen(recipeId: targetId)));
+      // Chuyển trang (Bỏ comment dòng dưới để chạy thật)
+      // Navigator.push(context, MaterialPageRoute(builder: (_) => BlogScreen(recipeData: result['data'])));
       print("🚀 Navigate to Recipe: ${result['data']['name']}");
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -83,50 +82,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     }
   }
 
-  // --- 🔥 [MỚI] LOGIC XÓA THÔNG BÁO ---
-  Future<void> _onDeleteNotification(String id) async {
-    // Hiển thị hộp thoại xác nhận trước khi xóa
-    final bool? confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Xóa thông báo?"),
-        content: const Text("Bạn có chắc muốn xóa thông báo này vĩnh viễn không?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("Hủy"),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text("Xóa", style: TextStyle(color: kErrorColor)),
-          ),
-        ],
-      ),
-    );
+  // ❌ ĐÃ XÓA HÀM _onDeleteNotification VÌ BẠN KHÔNG MUỐN XÓA NỮA
 
-    if (confirm != true) return;
-
-    // Tiến hành xóa
-    // 1. Gọi API Xóa
-    final result = await RecipeService.deleteNotification(id); // Bạn cần thêm hàm này vào Service
-
-    if (!mounted) return;
-
-    if (result['success'] == true) {
-      // 2. Xóa khỏi danh sách local để cập nhật UI
-      setState(() {
-        _allNotifications.removeWhere((item) => item['_id'] == id);
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Đã xóa thông báo")),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Lỗi khi xóa thông báo"), backgroundColor: kErrorColor),
-      );
-    }
-  }
-  
   String _formatTime(String? dateString) {
     if (dateString == null) return "";
     final date = DateTime.parse(dateString).toLocal();
@@ -186,12 +143,12 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                   child: _isLoading 
                                     ? const Center(child: CircularProgressIndicator(color: kIndicatorColor))
                                     : TabBarView(
-                                      controller: _tabController,
-                                      children: [
-                                        _buildNotificationList(unreadNotifications, isNewTab: true),
-                                        _buildNotificationList(_allNotifications, isNewTab: false),
-                                      ],
-                                    ),
+                                        controller: _tabController,
+                                        children: [
+                                          _buildNotificationList(unreadNotifications),
+                                          _buildNotificationList(_allNotifications),
+                                        ],
+                                      ),
                                 ),
                               ],
                             ),
@@ -258,7 +215,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     );
   }
 
-  Widget _buildNotificationList(List<dynamic> notifications, {required bool isNewTab}) {
+  Widget _buildNotificationList(List<dynamic> notifications) {
     if (notifications.isEmpty) {
       return Center(
         child: Column(
@@ -292,9 +249,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   title: item['title'] ?? 'Thông báo',
                   subtitle: item['message'] ?? '',
                   time: _formatTime(item['createdAt']),
-                  isHighlighted: !isRead, 
-                  // Truyền hàm xóa vào đây
-                  onDelete: () => _onDeleteNotification(item['_id']),
+                  isHighlighted: !isRead,
+                  // Truyền Icon widget tương ứng
                   iconWidget: isRead ? _buildCheckIcon() : _buildRadioIcon(),
                 ),
               );
@@ -322,14 +278,14 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   }
 }
 
-// --- CẬP NHẬT UI ITEM CARD ĐỂ CÓ NÚT XÓA ---
+// --- CẬP NHẬT UI ITEM CARD: BỎ NÚT DELETE ---
 class NotificationItemCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final String time;
   final bool isHighlighted;
   final Widget iconWidget;
-  final VoidCallback onDelete; // Callback xóa
+  // Đã xóa callback onDelete
 
   const NotificationItemCard({
     super.key,
@@ -338,7 +294,6 @@ class NotificationItemCard extends StatelessWidget {
     required this.time,
     this.isHighlighted = false,
     required this.iconWidget,
-    required this.onDelete, // Yêu cầu truyền hàm xóa
   });
 
   @override
@@ -370,9 +325,6 @@ class NotificationItemCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      // Icon trạng thái (Đã xem/Chưa xem) để cạnh tiêu đề hoặc để cuối dòng tùy bạn
-                      // Ở code cũ bạn để iconWidget ở cuối Row lớn, tôi giữ nguyên logic đó bên dưới
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -391,28 +343,11 @@ class NotificationItemCard extends StatelessWidget {
               ),
             ),
             
-            // Cột bên phải: Icon trạng thái + Nút Xóa
-            Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
-                  child: iconWidget, // Icon tròn check/radio
-                ),
-                const SizedBox(height: 12),
-                // NÚT XÓA THÊM VÀO ĐÂY
-                InkWell(
-                  onTap: onDelete,
-                  borderRadius: BorderRadius.circular(20),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: const Icon(
-                      Icons.delete_outline_rounded, 
-                      color: kSecondaryText, // Hoặc màu đỏ kErrorColor nếu muốn nổi bật
-                      size: 20,
-                    ),
-                  ),
-                )
-              ],
+            // Cột bên phải: CHỈ CÒN ICON TRẠNG THÁI (Đã xem/Chưa xem)
+            // Đã xóa nút Delete
+            Padding(
+              padding: const EdgeInsets.only(left: 12.0, top: 4.0),
+              child: iconWidget, // Icon tròn check/radio
             ),
           ],
         ),

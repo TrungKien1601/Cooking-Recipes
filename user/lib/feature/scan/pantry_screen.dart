@@ -1,14 +1,22 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:http/http.dart' as http;
 import '../services/scan_service.dart';
 import '../scan/qr_scanner_screen.dart';
 import '../scan/ingredient_scanner_screen.dart';
-import '../recipe/blog_screen.dart'; 
+import '../recipe/blog_screen.dart';
 import '../auth/login_screen.dart';
 import '../home/homepage_screen.dart';
+import '../services/util_service.dart';
+
+// --- MÀU SẮC CHỦ ĐẠO ---
+class PantryColors {
+  static const Color kPrimaryColor = Color(0xFF568C4C);
+  static const Color kColorSecondaryText = Color(0xFF57636C);
+  static const Color kCardColor = Color(0xFF222232);
+  static const Color kBgColor = Color(0xFFF5F7FA);
+  static const Color errorColor = const Color(0xFFFF5963);
+}
 
 class PantryScreen extends StatefulWidget {
   const PantryScreen({super.key});
@@ -18,9 +26,6 @@ class PantryScreen extends StatefulWidget {
 }
 
 class _PantryScreenState extends State<PantryScreen> {
-  static const Color kPrimaryColor = Color(0xFF568C4C);
-  static const Color kCardColor = Color(0xFF222232); // Màu nền tối cho Dialog/Sheet
-
   List<dynamic> _pantryItems = [];
   bool _isLoading = true;
   bool _isSuggesting = false;
@@ -44,7 +49,7 @@ class _PantryScreenState extends State<PantryScreen> {
     setState(() {
       _isLoading = false;
       if (result['success'] == true) {
-        _pantryItems = result['data'];
+        _pantryItems = result['data'] ?? [];
       } else {
         _handleError(result['message']);
       }
@@ -58,24 +63,26 @@ class _PantryScreenState extends State<PantryScreen> {
           MaterialPageRoute(builder: (_) => const LoginScreen()),
           (route) => false);
     } else {
-      _showSnackBar(message ?? "Đã có lỗi xảy ra");
+      _showSnackBar(message ?? "Đã có lỗi xảy ra", isError: true);
     }
   }
 
   Future<void> _deleteItem(String id, int index) async {
     final deletedItem = _pantryItems[index];
     setState(() => _pantryItems.removeAt(index));
+
     final result = await ScanService.deleteItem(id);
+
     if (!mounted) return;
     if (result['success'] != true) {
       setState(() => _pantryItems.insert(index, deletedItem));
-      _showSnackBar("Lỗi xóa món ăn", isError: true);
+      _showSnackBar("Lỗi xóa món ăn: ${result['message']}", isError: true);
     } else {
-      _showSnackBar("Đã xóa");
+      _showSnackBar("Đã xóa thành công");
     }
   }
 
-  // --- SỬA MÓN (ĐÃ FIX LỖI CHỌN LỊCH) ---
+  // --- SỬA MÓN ---
   void _showEditPantryItem(int index) {
     final item = _pantryItems[index];
 
@@ -86,64 +93,61 @@ class _PantryScreenState extends State<PantryScreen> {
     final TextEditingController weightCtrl =
         TextEditingController(text: item['weight'].toString());
 
-    // Xử lý ngày tháng ban đầu
     DateTime selectedDate = PantryHelper.parseDate(item['expiryDate']);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (selectedDate.isBefore(today)) {
+      selectedDate = today;
+    }
 
-    // Controller riêng cho ngày tháng (Để hiển thị text đẹp)
     final TextEditingController dateCtrl = TextEditingController(
-      text: DateFormat('dd/MM/yyyy').format(selectedDate)
-    );
+        text: DateFormat('dd/MM/yyyy').format(selectedDate));
 
-    // Check storage từ backend trả về
     String currentStorage = item['storage']?.toString().toUpperCase() ?? "";
     bool isFrozen =
         currentStorage.contains("ĐÔNG") || currentStorage.contains("FREEZER");
-    
-    // Thêm biến loading cho dialog
-    bool _isSavingDialog = false;
+
+    bool isSavingDialog = false;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(builder: (context, setStateDialog) {
-        
-        // Logic đổi ngăn đông/mát
         void toggleFreezer(bool value) {
           setStateDialog(() {
             isFrozen = value;
           });
         }
-        
-        // Hàm chọn lịch
+
         Future<void> pickDateDialog() async {
           final DateTime? picked = await showDatePicker(
-              context: context,
-              initialDate: selectedDate,
-              firstDate: DateTime.now().subtract(const Duration(days: 365)),
-              lastDate: DateTime(2100),
-              builder: (context, child) {
-                  return Theme(
-                      data: Theme.of(context).copyWith(
-                          colorScheme: const ColorScheme.light(
-                              primary: kPrimaryColor, // Màu xanh chủ đạo
-                              onPrimary: Colors.white,
-                              onSurface: Colors.black,
-                          ),
-                      ),
-                      child: child!,
-                  );
-              },
+            context: context,
+            initialDate: selectedDate,
+            firstDate: today,
+            lastDate: DateTime(2100),
+            builder: (context, child) {
+              return Theme(
+                data: Theme.of(context).copyWith(
+                  colorScheme: const ColorScheme.light(
+                    primary: PantryColors.kPrimaryColor,
+                    onPrimary: Colors.white,
+                    onSurface: Colors.black,
+                  ),
+                ),
+                child: child!,
+              );
+            },
           );
+
           if (picked != null) {
             setStateDialog(() {
               selectedDate = picked;
-              // Cập nhật text hiển thị sau khi chọn
               dateCtrl.text = DateFormat('dd/MM/yyyy').format(selectedDate);
             });
           }
         }
 
         return AlertDialog(
-          backgroundColor: kCardColor,
+          backgroundColor: PantryColors.kColorSecondaryText,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text("Chỉnh sửa thông tin",
@@ -184,11 +188,11 @@ class _PantryScreenState extends State<PantryScreen> {
                         controller: weightCtrl,
                         keyboardType: TextInputType.number,
                         style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                            labelText: "Nặng/Dung tích",
-                            labelStyle: const TextStyle(color: Colors.grey),
-                            suffixText: item['unit'] ?? "",
-                            border: const OutlineInputBorder()),
+                        decoration: const InputDecoration(
+                            labelText: "Trọng lượng quy đổi",
+                            labelStyle: TextStyle(color: Colors.grey),
+                            suffixText: "g/ml",
+                            border: OutlineInputBorder()),
                       ),
                     ),
                   ],
@@ -199,24 +203,25 @@ class _PantryScreenState extends State<PantryScreen> {
                       style:
                           const TextStyle(color: Colors.white, fontSize: 14)),
                   value: isFrozen,
-                  activeColor: Colors.blueAccent,
+                  activeThumbColor: Colors.blueAccent,
                   onChanged: toggleFreezer,
                 ),
                 const SizedBox(height: 16),
-                
-                
                 TextField(
-                  controller: dateCtrl, // Hiển thị ngày tháng
-                  readOnly: true,       // Chặn bàn phím, chỉ bắt click
-                  style: const TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold),
+                  controller: dateCtrl,
+                  readOnly: true,
+                  style: const TextStyle(
+                      color: Colors.orangeAccent, fontWeight: FontWeight.bold),
                   decoration: const InputDecoration(
                     labelText: "Hạn sử dụng",
                     labelStyle: TextStyle(color: Colors.grey),
-                    prefixIcon: Icon(Icons.calendar_today, color: Colors.orange),
+                    prefixIcon:
+                        Icon(Icons.calendar_today, color: Colors.orange),
                     border: OutlineInputBorder(),
-                    suffixIcon: Icon(Icons.arrow_drop_down, color: Colors.white54), 
+                    suffixIcon:
+                        Icon(Icons.arrow_drop_down, color: Colors.white54),
                   ),
-                  onTap: pickDateDialog, // Bấm vào gọi hàm chọn lịch
+                  onTap: pickDateDialog,
                 )
               ],
             ),
@@ -227,39 +232,49 @@ class _PantryScreenState extends State<PantryScreen> {
                 child:
                     const Text("Hủy", style: TextStyle(color: Colors.white54))),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: kPrimaryColor),
-              onPressed: _isSavingDialog ? null : () async {
-                setStateDialog(() => _isSavingDialog = true); // Kích hoạt loading
-                
-                final updateData = {
-                  "name": nameCtrl.text,
-                  // Dùng double.tryParse an toàn
-                  "quantity": double.tryParse(qtyCtrl.text) ?? 1.0, 
-                  "weight": double.tryParse(weightCtrl.text) ?? 0.0,
-                  "expiryDate": selectedDate.toIso8601String(),
-                  "storage": isFrozen ? "Ngăn đông" : "Ngăn mát"
-                };
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: PantryColors.kPrimaryColor),
+              onPressed: isSavingDialog
+                  ? null
+                  : () async {
+                      setStateDialog(() => isSavingDialog = true);
 
-                final result =
-                    await ScanService.updateItem(item['_id'], updateData);
+                      // Fix: Parse double an toàn với dấu phẩy
+                      double parseSafe(String txt) {
+                        return double.tryParse(txt.replaceAll(',', '.')) ?? 0.0;
+                      }
 
-                if (!mounted) return;
-                
-                // Dù thành công hay thất bại, đóng dialog
-                Navigator.pop(context); 
-                
-                if (result['success'] == true) {
-                  // Tải lại toàn bộ dữ liệu để đảm bảo cập nhật
-                  _loadPantryData(); 
-                  _showSnackBar("Cập nhật thành công!");
-                } else {
-                  _showSnackBar(result['message'], isError: true);
-                }
-              },
-              // Hiển thị loading (UX)
-              child: _isSavingDialog
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Text("Lưu thay đổi", style: TextStyle(color: Colors.white)),
+                      final updateData = {
+                        "name": nameCtrl.text,
+                        "quantity": parseSafe(qtyCtrl.text) == 0.0
+                            ? 1.0
+                            : parseSafe(qtyCtrl.text),
+                        "weight": parseSafe(weightCtrl.text),
+                        "expiryDate": selectedDate.toIso8601String(),
+                        "storage": isFrozen ? "Ngăn đông" : "Ngăn mát"
+                      };
+
+                      final result =
+                          await ScanService.updateItem(item['_id'], updateData);
+
+                      if (!mounted) return;
+                      Navigator.pop(context);
+
+                      if (result['success'] == true) {
+                        _loadPantryData();
+                        _showSnackBar("Cập nhật thành công!");
+                      } else {
+                        _showSnackBar(result['message'], isError: true);
+                      }
+                    },
+              child: isSavingDialog
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                  : const Text("Lưu thay đổi",
+                      style: TextStyle(color: Colors.white)),
             ),
           ],
         );
@@ -267,7 +282,102 @@ class _PantryScreenState extends State<PantryScreen> {
     );
   }
 
-  // --- Show History ---
+  // --- GỢI Ý MÓN ---
+  Future<void> _showRecipeSuggestions() async {
+    if (_pantryItems.isEmpty) {
+      _showSnackBar("Tủ lạnh trống trơn!", isError: true);
+      return;
+    }
+
+    setState(() => _isSuggesting = true);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: const Color(0xFF151522),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => Container(
+        height: 300,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(color: PantryColors.kPrimaryColor),
+            const SizedBox(height: 20),
+            Text("Đầu bếp AI đang suy nghĩ...",
+                style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Text("Đang kết hợp các nguyên liệu trong tủ lạnh của bạn...",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(color: Colors.grey, fontSize: 14)),
+          ],
+        ),
+      ),
+    );
+
+    // Gọi API (Không cần context nữa)
+    final result = await ScanService.suggestChefRecipes(null, context: "");
+
+    if (!mounted) return;
+    setState(() => _isSuggesting = false);
+    Navigator.pop(context); // Đóng Loading Sheet
+
+    if (result['success'] == true) {
+      _showSuggestionSheet(result['data']); // Hiện kết quả
+    } else {
+      _showSnackBar(result['message'] ?? "AI chưa nghĩ ra món nào...",
+          isError: true);
+    }
+  }
+
+  void _showSuggestionSheet(List<dynamic> recipes) {
+    showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: const Color(0xFF151522),
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        builder: (context) => DraggableScrollableSheet(
+            initialChildSize: 0.7,
+            minChildSize: 0.5,
+            maxChildSize: 0.95,
+            expand: false,
+            builder: (_, controller) => Column(
+                  children: [
+                    const SizedBox(height: 15),
+                    Container(
+                      width: 40,
+                      height: 5,
+                      decoration: BoxDecoration(
+                          color: Colors.grey[600],
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    const SizedBox(height: 15),
+                    Text("Gợi ý cho bạn hôm nay",
+                        style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: ListView.builder(
+                          controller: controller,
+                          itemCount: recipes.length,
+                          padding: const EdgeInsets.all(16),
+                          itemBuilder: (ctx, index) =>
+                              _buildRecipeTile(recipes[index], isCard: true)),
+                    ),
+                  ],
+                )));
+  }
+
+  // --- LỊCH SỬ ---
   void _showHistorySheet() {
     _selectedIds.clear();
     _isSelectionMode = false;
@@ -276,7 +386,7 @@ class _PantryScreenState extends State<PantryScreen> {
     showModalBottomSheet(
         context: context,
         isScrollControlled: true,
-        backgroundColor: const Color(0xFF151522),
+        backgroundColor: const Color(0xFF57636C),
         shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
         builder: (context) => StatefulBuilder(
@@ -320,30 +430,30 @@ class _PantryScreenState extends State<PantryScreen> {
                                         onPressed: _selectedIds.isEmpty
                                             ? null
                                             : () async {
-                                                  final idsToDelete =
-                                                      _selectedIds.toList();
-                                                  final result = await ScanService
-                                                      .deleteHistoryItems(
-                                                          idsToDelete);
-                                                  if (result['success'] == true) {
-                                                    setModalState(() {
-                                                      _historyList.removeWhere(
-                                                          (item) => idsToDelete
-                                                              .contains(
-                                                                  item['_id']));
-                                                      _selectedIds.clear();
-                                                      _isSelectionMode = false;
-                                                    });
-                                                    if (mounted)
-                                                      _showSnackBar(
-                                                          "Đã xóa ${idsToDelete.length} mục");
-                                                  } else {
-                                                    if (mounted)
-                                                      _showSnackBar(
-                                                          result['message'],
-                                                          isError: true);
-                                                  }
-                                                },
+                                                final idsToDelete =
+                                                    _selectedIds.toList();
+                                                final result = await ScanService
+                                                    .deleteHistoryItems(
+                                                        idsToDelete);
+                                                if (result['success'] == true) {
+                                                  setModalState(() {
+                                                    _historyList.removeWhere(
+                                                        (item) => idsToDelete
+                                                            .contains(
+                                                                item['_id']));
+                                                    _selectedIds.clear();
+                                                    _isSelectionMode = false;
+                                                  });
+                                                  if (mounted)
+                                                    _showSnackBar(
+                                                        "Đã xóa ${idsToDelete.length} mục");
+                                                } else {
+                                                  if (mounted)
+                                                    _showSnackBar(
+                                                        result['message'],
+                                                        isError: true);
+                                                }
+                                              },
                                         icon: const Icon(Icons.delete,
                                             color: Colors.redAccent),
                                         label: Text(
@@ -382,7 +492,8 @@ class _PantryScreenState extends State<PantryScreen> {
                                               TextStyle(color: Colors.grey)));
                                 }
                                 if (_historyList.isEmpty)
-                                  _historyList = snapshot.data!['data'] as List;
+                                  _historyList =
+                                      snapshot.data!['data'] as List;
                                 if (_historyList.isEmpty)
                                   return const Center(
                                       child: Text("Chưa có lịch sử nào",
@@ -442,21 +553,22 @@ class _PantryScreenState extends State<PantryScreen> {
                   ),
                 Expanded(
                   child: ExpansionTile(
-                      key: PageStorageKey(id),
-                      enabled: !_isSelectionMode,
-                      collapsedIconColor: Colors.white,
-                      iconColor: Colors.orange,
-                      title: Text(DateFormat('dd/MM/yyyy - HH:mm').format(date),
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold)),
-                      subtitle: Text(
-                          "${(session['recipes'] as List).length} món được gợi ý",
-                          style: const TextStyle(
-                              color: Colors.grey, fontSize: 12)),
-                      children: (session['recipes'] as List)
-                          .map((recipe) => _buildRecipeTile(recipe))
-                          .toList()),
+                    key: PageStorageKey(id),
+                    enabled: !_isSelectionMode,
+                    collapsedIconColor: Colors.white,
+                    iconColor: Colors.orange,
+                    title: Text(DateFormat('dd/MM/yyyy - HH:mm').format(date),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold)),
+                    subtitle: Text(
+                        "${(session['recipes'] as List).length} món được gợi ý",
+                        style:
+                            const TextStyle(color: Colors.grey, fontSize: 12)),
+                    children: (session['recipes'] as List)
+                        .map((recipe) => _buildRecipeTile(recipe))
+                        .toList(),
+                  ),
                 ),
               ]),
             ),
@@ -464,45 +576,16 @@ class _PantryScreenState extends State<PantryScreen> {
         });
   }
 
-  // --- GỢI Ý MÓN ---
-  Future<void> _showRecipeSuggestions() async {
-    if (_pantryItems.isEmpty) {
-      _showSnackBar("Tủ lạnh trống trơn!");
-      return;
-    }
-    setState(() => _isSuggesting = true);
-    final result = await ScanService.suggestChefRecipes(null);
-    setState(() => _isSuggesting = false);
-    if (!mounted) return;
-    if (result['success'] == true) {
-      _showSuggestionSheet(result['data']);
-    } else {
-      _showSnackBar(result['message'] ?? "AI chưa nghĩ ra món nào...",
-          isError: true);
-    }
-  }
-
-  void _showSuggestionSheet(List<dynamic> recipes) {
-    showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: const Color(0xFF151522),
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-        builder: (context) => DraggableScrollableSheet(
-            initialChildSize: 0.7,
-            minChildSize: 0.5,
-            maxChildSize: 0.95,
-            expand: false,
-            builder: (_, controller) => ListView.builder(
-                controller: controller,
-                itemCount: recipes.length,
-                padding: const EdgeInsets.all(16),
-                itemBuilder: (ctx, index) =>
-                    _buildRecipeTile(recipes[index], isCard: true))));
-  }
-
+  // --- 🔥 ĐÃ FIX: BUILD RECIPE TILE (Xử lý hiển thị Steps đúng chuẩn) ---
   Widget _buildRecipeTile(dynamic recipe, {bool isCard = false}) {
+    // Xử lý thời gian nấu
+    String cookTimeDisplay = "30p";
+    if (recipe['cookTimeMinutes'] != null) {
+      cookTimeDisplay = "${recipe['cookTimeMinutes']}p";
+    } else if (recipe['cooking_time'] != null) {
+      cookTimeDisplay = recipe['cooking_time'].toString();
+    }
+
     final tile = ListTile(
       leading: ClipRRect(
           borderRadius: BorderRadius.circular(8),
@@ -526,22 +609,31 @@ class _PantryScreenState extends State<PantryScreen> {
               color: Colors.white, fontWeight: FontWeight.bold)),
       subtitle: isCard
           ? Text(
-              "${recipe['calories'] ?? 0} kcal • ${recipe['cooking_time'] ?? '30p'}",
+              "${recipe['calories'] ?? 0} kcal • $cookTimeDisplay",
               style: const TextStyle(color: Colors.grey))
           : null,
       trailing:
           const Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 16),
       onTap: () {
-        // --- CHUẨN BỊ DỮ LIỆU ---
+        double safeNum(dynamic val) {
+          if (val == null) return 0.0;
+          return double.tryParse(val.toString()) ?? 0.0;
+        }
+
+        final macroData = recipe['macros'] ?? recipe['nutritionAnalysis'] ?? {};
+        
         final Map<String, dynamic> detailData = {
+          '_id': null, // ID null để BlogScreen biết đây là data truyền sang, không fetch lại
           'name': recipe['name'],
-          'image': Uri.encodeFull(recipe['image_url'] ?? recipe['image'] ?? '').toString(),
-          'description': recipe['description'] ??
-              "Món ${recipe['name']} thơm ngon, đầy đủ dinh dưỡng.",
-          'difficulty': recipe['difficulty'],
-          'chef_tips': recipe['chef_tips'],
-          'time': recipe['cooking_time'],
-          'calories': recipe['calories'],
+          'image': Uri.encodeFull(recipe['image_url'] ?? recipe['image'] ?? '')
+              .toString(),
+          'description': recipe['description'] ?? "Món ngon dinh dưỡng.",
+          'difficulty': recipe['difficulty'] ?? "Trung bình",
+          'chef_tips': recipe['chef_tips'] ?? "",
+          'time': cookTimeDisplay,
+          'calories': recipe['calories'] ?? 0,
+          
+          // Ingredients mapping
           'ingredients': (recipe['all_ingredients'] as List?)
                   ?.map((e) => e.toString())
                   .toList() ??
@@ -549,13 +641,30 @@ class _PantryScreenState extends State<PantryScreen> {
                   ?.map((e) => e.toString())
                   .toList() ??
               ["Đang cập nhật..."],
-          'instructions':
-              (recipe['steps'] as List?)?.map((e) => e.toString()).toList() ??
-                  (recipe['instructions'] as List?)
-                      ?.map((e) => e.toString())
-                      .toList() ??
-                  ["Đang cập nhật hướng dẫn..."],
-          'macros': recipe['macros'] ?? {'protein': 0, 'carbs': 0, 'fat': 0},
+          
+          // 🔥 FIX QUAN TRỌNG: Xử lý Steps nếu là Object
+          'instructions': (recipe['steps'] as List?)?.map((e) {
+                if (e is Map) {
+                  return e['description']?.toString() ?? "";
+                }
+                return e.toString();
+              }).toList() ??
+              (recipe['instructions'] as List?)?.map((e) {
+                if (e is Map) {
+                  return e['description']?.toString() ?? "";
+                }
+                return e.toString();
+              }).toList() ??
+              ["Đang cập nhật hướng dẫn..."],
+              
+          'nutritionAnalysis': {
+            'calories': recipe['calories'] ?? 0,
+            'protein': safeNum(macroData['protein']),
+            'carbs': safeNum(macroData['carbs']),
+            'fat': safeNum(macroData['fat']),
+            'sugars': safeNum(macroData['sugars']),
+            'sodium': safeNum(macroData['sodium']),
+          },
         };
 
         Navigator.push(
@@ -566,7 +675,7 @@ class _PantryScreenState extends State<PantryScreen> {
     );
     return isCard
         ? Card(
-            color: const Color(0xFF222232),
+            color: PantryColors.kCardColor,
             margin: const EdgeInsets.only(bottom: 12),
             child: tile)
         : tile;
@@ -623,13 +732,13 @@ class _PantryScreenState extends State<PantryScreen> {
   void _showSnackBar(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(msg),
-        backgroundColor: isError ? Colors.red : kPrimaryColor));
+        backgroundColor: isError ? Colors.red : PantryColors.kPrimaryColor));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: PantryColors.kBgColor,
       appBar: AppBar(
         title: const Text("Tủ lạnh của tôi",
             style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
@@ -657,16 +766,17 @@ class _PantryScreenState extends State<PantryScreen> {
           children: [
             Container(
               padding: const EdgeInsets.all(16),
-              color: const Color(0xFFF5F7FA),
+              color: PantryColors.kBgColor,
               child: ElevatedButton.icon(
                 onPressed: (_isSuggesting || _isLoading)
                     ? null
-                    : _showRecipeSuggestions,
-                icon: const Icon(Icons.lightbulb_outline, color: Colors.white),
+                    : _showRecipeSuggestions, // Gọi thẳng hàm, không qua dialog
+                icon:
+                    const Icon(Icons.lightbulb_outline, color: Colors.white),
                 label:
                     Text(_isSuggesting ? "Đang suy nghĩ..." : "Gợi ý món ăn"),
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: kPrimaryColor,
+                    backgroundColor: PantryColors.kPrimaryColor,
                     minimumSize: const Size(double.infinity, 50),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12))),
@@ -675,7 +785,7 @@ class _PantryScreenState extends State<PantryScreen> {
             Expanded(
               child: _isLoading
                   ? const Center(
-                      child: CircularProgressIndicator(color: kPrimaryColor))
+                      child: CircularProgressIndicator(color: PantryColors.kPrimaryColor))
                   : _pantryItems.isEmpty
                       ? const Center(
                           child: Column(
@@ -695,12 +805,62 @@ class _PantryScreenState extends State<PantryScreen> {
                           itemCount: _pantryItems.length,
                           itemBuilder: (context, index) {
                             final item = _pantryItems[index];
-                            return PantryItemTile(
-                              key: Key(item['_id'] ?? "$index"),
-                              item: item,
-                              baseUrl: ScanService.baseUrl,
-                              onDelete: () => _deleteItem(item['_id'], index),
-                              onEdit: () => _showEditPantryItem(index),
+                            final itemKey = Key(item['_id'] ?? "$index");
+
+                            // VUỐT ĐỂ XÓA (Dismissible)
+                            return Dismissible(
+                              key: itemKey,
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20),
+                                margin: const EdgeInsets.only(bottom: 12),
+                                decoration: BoxDecoration(
+                                  color: Colors.redAccent,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: const Icon(Icons.delete,
+                                    color: Colors.white, size: 30),
+                              ),
+                              confirmDismiss: (direction) async {
+                                return await showDialog(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    backgroundColor: PantryColors.kCardColor,
+                                    title: const Text("Xác nhận xóa?",
+                                        style:
+                                            TextStyle(color: Colors.white)),
+                                    content: Text(
+                                        "Bạn có chắc muốn xóa '${item['name']}'?",
+                                        style: const TextStyle(
+                                            color: Colors.white70)),
+                                    actions: [
+                                      TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, false),
+                                          child: const Text("Hủy",
+                                              style: TextStyle(
+                                                  color: Colors.white54))),
+                                      TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, true),
+                                          child: const Text("Xóa",
+                                              style: TextStyle(
+                                                  color: Colors.redAccent))),
+                                    ],
+                                  ),
+                                );
+                              },
+                              onDismissed: (direction) {
+                                _deleteItem(item['_id'], index);
+                              },
+                              child: PantryItemTile(
+                                item: item,
+                                baseUrl: ScanService.baseUrl,
+                                onDelete: () =>
+                                    _deleteItem(item['_id'], index),
+                                onEdit: () => _showEditPantryItem(index),
+                              ),
                             );
                           },
                         ),
@@ -710,7 +870,7 @@ class _PantryScreenState extends State<PantryScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddMenu(context),
-        backgroundColor: kPrimaryColor,
+        backgroundColor: PantryColors.kPrimaryColor,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text("Thêm đồ",
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -719,9 +879,6 @@ class _PantryScreenState extends State<PantryScreen> {
   }
 }
 
-// ============================================================================
-// --- SUB-WIDGET: PANTRY ITEM TILE ---
-// ============================================================================
 class PantryItemTile extends StatelessWidget {
   final Map<String, dynamic> item;
   final String baseUrl;
@@ -749,31 +906,40 @@ class PantryItemTile extends StatelessWidget {
     final Color cardColor = PantryHelper.getExpirationColor(expDate);
     final Color statusColor = PantryHelper.getTextColor(expDate);
 
-    // Lấy dữ liệu
+    String name = item['name'] ?? "Món không tên";
     double weight = double.tryParse(item['weight'].toString()) ?? 0;
     double quantity = double.tryParse(item['quantity'].toString()) ?? 0;
     String unit = item['unit'] ?? "cái";
 
-    // --- LOGIC HIỂN THỊ CÂN NẶNG ---
-    String weightUnit = "gram"; 
-    if (['kg', 'g', 'gram', 'ml', 'l', 'lít'].contains(unit.toLowerCase())) {
-      weightUnit = unit;
+    // --- LOGIC HIỂN THỊ ĐƠN VỊ THÔNG MINH ---
+    bool isLiquid = [
+      'nước',
+      'sữa',
+      'dầu',
+      'mắm',
+      'bia',
+      'rượu',
+      'canh',
+      'súp',
+      'lít',
+      'ml',
+      'l'
+    ].any((k) => name.toLowerCase().contains(k));
+    String subUnit = isLiquid ? "ml" : "g";
+
+    bool isStandardUnit =
+        ['kg', 'g', 'gram', 'ml', 'l', 'lít', 'lit'].contains(unit.toLowerCase());
+
+    String mainQuantityText = "${_fmt(quantity)} $unit";
+    String subWeightText = "";
+
+    if (weight > 1 && !isStandardUnit) {
+      subWeightText = "≈ ${_fmt(weight)} $subUnit";
     }
 
-    String weightText = "";
-    if (weight > 0) {
-      if (quantity > 1) {
-        // Nếu nhiều món: "500 gram/phần"
-        weightText = "${_fmt(weight)} $weightUnit/phần"; 
-      } else {
-        // Nếu 1 món: "500 gram"
-        weightText = "${_fmt(weight)} $weightUnit";
-      }
-    }
-
-    // --- LOGIC HIỂN THỊ STORAGE ---
     String storageRaw = item['storage']?.toString().toUpperCase() ?? "FRIDGE";
-    bool isFrozen = storageRaw.contains("ĐÔNG") || storageRaw.contains("FREEZER");
+    bool isFrozen =
+        storageRaw.contains("ĐÔNG") || storageRaw.contains("FREEZER");
 
     String storageLabel = "Tủ bếp";
     Color storageColor = Colors.brown;
@@ -812,7 +978,6 @@ class PantryItemTile extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- CỘT TRÁI: ẢNH ---
             Stack(
               children: [
                 Container(
@@ -824,91 +989,85 @@ class PantryItemTile extends StatelessWidget {
                     child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
                         child: hasServerImage
-                            ? _buildServerImage(serverImage!)
-                            : _buildGoogleImage(item['name'] ?? "Food"))),
+                            ? _buildServerImage(serverImage)
+                            : _buildGoogleImage(name))),
                 Positioned(
                     bottom: 0,
                     right: 0,
                     child: Container(
-                        padding: const EdgeInsets.all(2),
+                        padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
                             color: storageColor, shape: BoxShape.circle),
-                        child: Icon(storageIcon, color: Colors.white, size: 12))),
+                        child: Icon(storageIcon, color: Colors.white, size: 14))),
               ],
             ),
             const SizedBox(width: 16),
-
-            // --- CỘT GIỮA: THÔNG TIN ---
             Expanded(
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(item['name'] ?? "Không tên",
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 6),
-
-                      // DÒNG 1: SỐ LƯỢNG
-                      Row(children: [
-                        const Icon(Icons.format_list_numbered,
-                            size: 14, color: Colors.grey),
+                  Text(name,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 6),
+                  Row(children: [
+                    const Icon(Icons.receipt_long_rounded,
+                        size: 14,
+                        color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(mainQuantityText,
+                        style: TextStyle(
+                            color: Colors.grey[800],
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500))
+                  ]),
+                  if (subWeightText.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Row(children: [
+                      const Icon(Icons.scale_rounded,
+                          size: 14, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(subWeightText,
+                          style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 13,
+                              fontStyle: FontStyle.italic))
+                    ]),
+                  ],
+                  const SizedBox(height: 8),
+                  Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                          color: isExpired
+                              ? Colors.red.withOpacity(0.1)
+                              : statusColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.access_time_filled,
+                            size: 14,
+                            color: isExpired ? Colors.red : statusColor),
                         const SizedBox(width: 4),
-                        Text(
-                            // Nếu unit là gram thì ghi là "Định lượng", còn lại ghi "SL"
-                            "${weightUnit == unit ? 'SL' : 'SL'}: ${_fmt(quantity)}",
-                            style: TextStyle(color: Colors.grey[800], fontSize: 13))
-                      ]),
-
-                      // DÒNG 2: CÂN NẶNG (HIỆN NẾU > 0)
-                      if (weight > 0) ...[
-                        const SizedBox(height: 4),
-                        Row(children: [
-                          const Icon(Icons.scale, size: 14, color: Colors.grey),
-                          const SizedBox(width: 4),
-                          // Luôn hiện chuỗi weightText đã xử lý ở trên
-                          Text("Nặng: $weightText",
-                              style: TextStyle(
-                                  color: Colors.grey[800], fontSize: 13))
-                        ]),
-                      ],
-
-                      // DÒNG 3: HẠN SỬ DỤNG
-                      const SizedBox(height: 8),
-                      Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                              color: isExpired
-                                  ? Colors.red.withOpacity(0.1)
-                                  : statusColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8)),
-                          child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            Icon(Icons.access_time,
-                                size: 14,
-                                color: isExpired ? Colors.red : statusColor),
-                            const SizedBox(width: 4),
-                            Text(PantryHelper.getStatusText(expDate),
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: isExpired ? Colors.red : statusColor))
-                          ]))
-                    ])),
-
-            // --- CỘT PHẢI: NÚT ---
+                        Text(PantryHelper.getStatusText(expDate),
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: isExpired ? Colors.red : statusColor))
+                      ]))
+                ])),
             Column(
               children: [
                 IconButton(
                     onPressed: onEdit,
-                    icon: const Icon(Icons.edit, color: Colors.blueGrey),
+                    icon: const Icon(Icons.edit_rounded, color: Colors.blueGrey),
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero),
                 const SizedBox(height: 15),
                 IconButton(
                     onPressed: onDelete,
-                    icon: Icon(Icons.delete_outline,
+                    icon: Icon(Icons.delete_outline_rounded,
                         color: Colors.red.shade400),
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero)
@@ -947,31 +1106,27 @@ class PantryItemTile extends StatelessWidget {
   }
 }
 
-// ... (Giữ nguyên ImageSearchHelper) ...
 class ImageSearchHelper {
-  static const String _apiKey = "AIzaSyAksWw3AwgHO7SaQw5bQZZDBkGQh_4G-88";
-  static const String _cxId = "81194332729ef486f";
   static final Map<String, String> _cache = {};
 
   static Future<String> findImage(String query) async {
     if (_cache.containsKey(query)) return _cache[query]!;
-    final String searchUrl =
-        "https://www.googleapis.com/customsearch/v1?q=$query food dish&cx=$_cxId&key=$_apiKey&searchType=image&num=1&imgSize=medium";
+
+    String? serverImage;
     try {
-      final response = await http.get(Uri.parse(searchUrl));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['items'] != null && data['items'].isNotEmpty) {
-          String url = data['items'][0]['link'];
-          _cache[query] = url;
-          return url;
-        }
-      }
-    } catch (e) {
-      print("Error: $e");
+      serverImage = await UtilService.searchImage("$query món ăn");
+    } catch (e) {}
+
+    if (serverImage != null && serverImage.isNotEmpty) {
+      _cache[query] = serverImage;
+      return serverImage;
     }
+
+    String prompt =
+        "delicious $query cooked dish, professional food photography, cinematic lighting, 8k";
     String fallback =
-        "https://image.pollinations.ai/prompt/${Uri.encodeComponent(query)}%20food";
+        "https://image.pollinations.ai/prompt/${Uri.encodeComponent(prompt)}";
+
     _cache[query] = fallback;
     return fallback;
   }
@@ -981,17 +1136,17 @@ class PantryHelper {
   static String getValidImageUrl(String? path, String baseUrl) {
     if (path == null || path.isEmpty) return "";
     if (path.startsWith("http")) return path;
+
     String cleanPath = path.replaceAll(r'\\', '/');
-    if (cleanPath.startsWith("/")) cleanPath = cleanPath.substring(1);
+    if (!cleanPath.startsWith("/")) cleanPath = "/$cleanPath";
 
-    // LOGIC FIX QUAN TRỌNG: Cắt bỏ đuôi "/api" và xử lý trailing slash
-    String domainUrl = baseUrl;
-    if (domainUrl.endsWith("/"))
-      domainUrl = domainUrl.substring(0, domainUrl.length - 1);
-    if (domainUrl.endsWith("/api"))
-      domainUrl = domainUrl.substring(0, domainUrl.length - 4);
+    String rootUrl = baseUrl;
+    if (rootUrl.endsWith("/"))
+      rootUrl = rootUrl.substring(0, rootUrl.length - 1);
+    if (rootUrl.endsWith("/api"))
+      rootUrl = rootUrl.substring(0, rootUrl.length - 4);
 
-    return "$domainUrl/$cleanPath";
+    return "$rootUrl$cleanPath";
   }
 
   static DateTime parseDate(String? dateStr) {
@@ -1003,10 +1158,12 @@ class PantryHelper {
       date.difference(DateTime.now()).inDays < 0
           ? Colors.red.shade100
           : Colors.white;
+
   static Color getTextColor(DateTime date) =>
       date.difference(DateTime.now()).inDays < 0
           ? Colors.red.shade700
           : Colors.green.shade700;
+
   static String getStatusText(DateTime date) {
     final diff = date.difference(DateTime.now()).inDays;
     return diff < 0

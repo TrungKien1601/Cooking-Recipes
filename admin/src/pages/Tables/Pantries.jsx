@@ -6,10 +6,10 @@ export default function BasicTables() {
   return (
     <>
       <PageMeta
-        title="Tủ đồ ăn"
-        description="Trang tủ đồ ăn"
+        title="Tủ lạnh người dùng"
+        description="Trang tủ lạnh người dùng"
       />
-      <PageBreadcrumb pageTitle="Tủ đồ ăn" />
+      <PageBreadcrumb pageTitle="Tủ lạnh người dùng" />
       <div className="space-y-6">
           <Pantries />
       </div>

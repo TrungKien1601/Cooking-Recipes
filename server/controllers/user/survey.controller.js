@@ -1,85 +1,101 @@
 const SurveyService = require('../../services/user/survey.service');
 
-// --- HELPER: Lấy User ID an toàn (Khớp với JwtUtils) ---
-const getUserId = (req) => {
-    // Ưu tiên lấy từ req.decoded (Do JwtUtils gán vào đây)
-    if (req.decoded && req.decoded._id) return req.decoded._id;
-    // Fallback nếu có middleware khác gán vào req.user
-    if (req.user && req.user._id) return req.user._id;
-    if (req.user && req.user.id) return req.user.id;
-    return null;
+// --- Helpers Utilities ---
+const getUserId = (req) => req.decoded?._id || req.user?._id || req.user?.id;
+
+// Helper xử lý lỗi tập trung
+const handleError = (res, error) => {
+    console.error("❌ Survey Controller Error:", error);
+
+    let statusCode = 500;
+    const msg = error.message || "Lỗi hệ thống";
+
+    // Map lỗi sang HTTP Status Code
+    if (msg === "AI_ERROR") statusCode = 502; 
+    else if (msg.includes("Unauthorized") || msg.includes("Phiên đăng nhập")) statusCode = 401;
+    else if (msg.includes("User not found")) statusCode = 404;
+    else if (msg.includes("Vui lòng") || msg.includes("không thực tế") || msg.includes("số dương")) statusCode = 400;
+
+    return res.status(statusCode).json({
+        success: false,
+        message: msg
+    });
 };
 
-// ==========================================
-// 1. API: Lấy danh sách options (Tags)
-// ==========================================
-exports.getSurveyOptions = async (req, res) => {
-    try {
-        const groupedOptions = await SurveyService.getSurveyOptions();
-        
-        if (!groupedOptions || Object.keys(groupedOptions).length === 0) {
+const surveyController = {
+    getSurveyOptions: async (req, res) => {
+        try {
+            const groupedOptions = await SurveyService.getSurveyOptions();
+            
+            const data = groupedOptions || {
+                healthConditions: [], habits: [], goals: [], diets: [], exclusions: []
+            };
+
             return res.status(200).json({ 
                 success: true, 
-                message: "Chưa có dữ liệu tags",
-                data: {} 
+                data: data 
             });
+        } catch (error) {
+            return handleError(res, error);
         }
+    },
+    submitSurvey: async (req, res) => {
+        try {
+            // 1. CHECK AUTH
+            const userId = getUserId(req);
+            if (!userId) throw new Error("Unauthorized: Phiên đăng nhập hết hạn.");
+            console.log(`📥 User ${userId} đang submit Survey...`);
+            let { weight, height, age, gender, goal, habits, diets, food_restrictions, exclusions, healthConditions } = req.body;
 
-        res.status(200).json({ success: true, data: groupedOptions });
-    } catch (error) {
-        console.error("🔥 Lỗi lấy options:", error);
-        res.status(500).json({ message: "Lỗi Server khi lấy Options" });
+            // Check required fields
+            if (!weight || !height || !age || !gender || !goal) {
+                throw new Error("Vui lòng điền đầy đủ: Cân nặng, Chiều cao, Tuổi, Giới tính, Mục tiêu.");
+            }
+            const w = Number(weight);
+            const h = Number(height);
+            const a = Number(age);
+
+            // Check số dương
+            if (isNaN(w) || w <= 0 || isNaN(h) || h <= 0 || isNaN(a) || a <= 0) {
+                throw new Error("Chỉ số cơ thể (Cân nặng, Chiều cao, Tuổi) phải là số dương!");
+            }
+
+            if (h > 300 || w > 500 || a > 120) {
+                throw new Error("Thông tin chỉ số cơ thể không thực tế. Vui lòng kiểm tra lại.");
+            }
+
+            // 3. CLEAN DATA OBJECT
+            const cleanData = {
+                ...req.body,
+                weight: w,
+                height: h,
+                age: a,
+                gender: gender.toString().trim(),
+                goal: goal.toString().trim(),
+                food_restrictions: food_restrictions ? food_restrictions.toString().trim() : "",
+                habits: Array.isArray(habits) ? habits : [],
+                diets: Array.isArray(diets) ? diets : [],
+                
+                // Nếu không có dòng này, Service sẽ nhận undefined và lọc không chuẩn
+                exclusions: Array.isArray(exclusions) ? exclusions : [], 
+                healthConditions: Array.isArray(healthConditions) ? healthConditions : [],
+            };
+
+            const resultData = await SurveyService.processSurveySubmission(userId, cleanData);
+
+            // Log nhẹ để debug xem có món ăn trả về không
+            console.log(`✅ Submit thành công. Đã lọc được: ${resultData.filteredRecipes?.length || 0} công thức.`);
+
+            return res.status(200).json({
+                success: true,
+                message: "Phân tích thành công!",
+                data: resultData 
+            });
+
+        } catch (error) {
+            return handleError(res, error);
+        }
     }
 };
 
-// ==========================================
-// 2. API: Gửi form khảo sát & Nhận Meal Plan
-// ==========================================
-exports.submitSurvey = async (req, res) => {
-    try {
-        // 1. SECURITY CHECK: Sửa lại cách lấy ID
-        const userId = getUserId(req);
-
-        if (!userId) {
-            return res.status(401).json({ message: "Vui lòng đăng nhập để thực hiện chức năng này!" });
-        }
-
-        const { weight, height, age, gender, goal } = req.body;
-
-        // 2. BASIC VALIDATION
-        if (!weight || !height || !age || !gender || !goal) {
-            return res.status(400).json({ message: "Vui lòng điền đầy đủ thông tin cơ bản (Cân nặng, Chiều cao, Tuổi...)" });
-        }
-
-        if (Number(weight) <= 0 || Number(height) <= 0 || Number(age) <= 0) {
-            return res.status(400).json({ message: "Thông tin chỉ số cơ thể không hợp lệ!" });
-        }
-
-        console.log(`📥 User ${userId} đang request Survey & Gemini...`);
-
-        // 3. Gọi Service xử lý
-        const resultData = await SurveyService.processSurveySubmission(userId, req.body);
-
-        res.status(200).json({
-            success: true,
-            message: "Tạo kế hoạch dinh dưỡng thành công!",
-            data: resultData
-        });
-
-    } catch (error) {
-        console.error("❌ ERROR submitSurvey:", error.message);
-        
-        // 4. Xử lý lỗi cụ thể
-        if (error.message === "AI_ERROR") {
-             return res.status(502).json({ 
-                 message: "Hệ thống AI đang quá tải hoặc gặp sự cố. Vui lòng thử lại sau ít phút." 
-             });
-        }
-        
-        if (error.message.includes("User không tồn tại")) {
-            return res.status(404).json({ message: "Không tìm thấy thông tin người dùng." });
-        }
-        
-        res.status(500).json({ message: "Lỗi Server nội bộ." });
-    }
-};
+module.exports = surveyController;

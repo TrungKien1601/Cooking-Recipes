@@ -2,27 +2,35 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+// --- IMPORTS ---
 import '../services/auth_service.dart';
-import '../recipe/add_recipe_screen.dart';
-import 'settings_screen.dart';
-import '../recipe/markdown_recipe_screen.dart'; // Màn hình Bookmark (Favorite)
-import '../recipe/my_recipes_screen.dart';
-import 'filter_screen.dart';
+import '../services/recipe_service.dart';
+import '../services/util_service.dart';
+
+// Screens
 import '../auth/login_screen.dart';
+import '../recipe/add_recipe_screen.dart';
+import '../recipe/markdown_recipe_screen.dart';
+import '../recipe/my_recipes_screen.dart';
+import '../recipe/blog_screen.dart';
 import '../scan/pantry_screen.dart';
-import 'notifications_screen.dart'; // ✅ Import màn hình thông báo
+import 'settings_screen.dart';
+import 'filter_screen.dart';
+import 'notifications_screen.dart';
 import 'aboutus_screen.dart';
 import 'contactus_screen.dart';
-import '../recipe/blog_screen.dart';
-import '../services/recipe_service.dart'; // Import service
 
 class HomePage extends StatefulWidget {
+  // Biến nhận dữ liệu từ Survey (Giữ nguyên logic này để app mượt)
+  final List<dynamic>? initialRecipes;
+  final Map<String, dynamic>? nutritionData;
   final List<String>? suggestedMeals;
 
   const HomePage({
-    super.key,
+    super.key, 
     this.suggestedMeals,
+    this.initialRecipes,
+    this.nutritionData
   });
 
   @override
@@ -30,272 +38,223 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  // --- CONTROLLERS ---
   late TextEditingController _searchController;
-  late FocusNode _searchFocusNode;
   late PageController _pageController;
-  int _selectedIndex = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // --- CẤU HÌNH SERVER ---
-  // Lưu ý: Đảm bảo domain này khớp với RecipeService
+  // --- SETTINGS ---
   final String baseUrl = RecipeService.domain;
+  final AuthService _authService = AuthService();
 
-  // --- CẤU HÌNH GOOGLE SEARCH API ---
-  final String _googleApiKey = "AIzaSyAksWw3AwgHO7SaQw5bQZZDBkGQh_4G-88"; // Lưu ý bảo mật key này
-  final String _googleCxId = "81194332729ef486f";
-
-  // Cache tạm để lưu link ảnh đã tìm được
-  final Map<String, String> _imageCache = {};
-
-  // --- DỮ LIỆU USER ---
+  // --- STATE DATA ---
   String _currentAvatar = "";
   String _currentName = "Chef";
+  int _selectedIndex = 0;
 
-  // Dữ liệu API
   List<dynamic> _aiRecommendations = [];
   List<dynamic> _allRecipes = [];
-  bool _isLoadingAi = true;
-  bool _isLoadingRecipes = true;
 
-  // ✅ BIẾN MỚI: Trạng thái thông báo chưa đọc
+  bool _isLoadingInitial = true;
   bool _hasUnreadNotifications = false;
-
-  // Biến lọc & UI
   String _searchQuery = "";
-  String _selectedCategory = "All";
+  Map<String, List<String>> _currentFilters = {};
 
-  // Colors
+  // --- COLORS ---
   final Color primaryBackground = const Color(0xFFF1F4F8);
   final Color secondaryBackground = Colors.white;
   final Color primaryColor = const Color(0xFF568C4C);
   final Color secondaryText = const Color(0xFF57636C);
   final Color primaryText = const Color(0xFF15161E);
-  final Color alternateBorder = const Color(0xFFE0E3E7);
-  final Color errorColor = const Color(0xFFFF5963);
-  final Color successColor = const Color(0xFF4FB239);
   final Color orangeAccent = const Color(0xFFFF6B35);
-  final Color shadowColor = const Color(0x1A000000);
-
-  // Card Background (định nghĩa thêm nếu thiếu)
-  final Color kCardBackground = Colors.white;
+  final Color errorColor = const Color(0xFFFF5963);
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController();
-    _searchFocusNode = FocusNode();
-    _pageController = PageController();
-
-    _loadUserData();
-    _fetchAllRecipes();
-
-    // ✅ Kiểm tra thông báo ngay khi mở app
-    _checkUnreadNotifications();
-
-    Future.delayed(const Duration(milliseconds: 500), () {
-      _fetchAiSuggestions();
-    });
+    _pageController = PageController(viewportFraction: 0.9); // Để lộ 1 chút card sau
+    _initialDataLoad();
   }
 
-  // ✅ HÀM: Kiểm tra thông báo chưa đọc
-  Future<void> _checkUnreadNotifications() async {
-    try {
-      final result = await RecipeService.getNotifications();
-      if (result['success'] == true && result['data'] != null) {
-        List<dynamic> notifications = result['data'];
-        // Nếu có bất kỳ thông báo nào mà isRead == false -> Hiện chấm đỏ
-        bool hasUnread = notifications.any((n) => n['isRead'] == false);
+  // ============================================================
+  // 1. LOGIC TẢI DỮ LIỆU
+  // ============================================================
 
-        if (mounted) {
-          setState(() {
-            _hasUnreadNotifications = hasUnread;
-          });
-        }
-      }
-    } catch (e) {
-      print("⚠️ Lỗi kiểm tra thông báo: $e");
-    }
-  }
+  Future<void> _initialDataLoad() async {
+    setState(() => _isLoadingInitial = true);
 
-  // ✅ [FIXED] Load User Data: Sửa fullName -> username
-  Future<void> _loadUserData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? userDataString = prefs.getString('user_data');
+    await Future.wait([
+      _loadUserProfile(),
+      _checkUnreadNotifications(),
+    ]);
 
-    if (userDataString != null) {
-      final data = jsonDecode(userDataString);
+    // Nếu có dữ liệu từ Survey truyền qua -> Dùng luôn
+    if (widget.initialRecipes != null && widget.initialRecipes!.isNotEmpty) {
       if (mounted) {
         setState(() {
-          // Ưu tiên 'username', nếu không có thì lấy 'name' (Google), cuối cùng là 'Chef'
-          _currentName = data['username'] ?? data['name'] ?? "Chef";
-          
-          String? img = data['image'];
-
-          if (img != null && img.isNotEmpty && !img.contains('default')) {
-            if (img.startsWith('http')) {
-              _currentAvatar = img;
-            } else {
-              String path = img;
-              if (path.startsWith('/')) path = path.substring(1);
-              _currentAvatar = "$baseUrl/$path?t=${DateTime.now().millisecondsSinceEpoch}";
-            }
-          } else {
-            _currentAvatar = "";
-          }
+          _allRecipes = widget.initialRecipes!;
+          _isLoadingInitial = false;
         });
       }
+    } else {
+      // Nếu không -> Tải từ API
+      await _fetchAllRecipes();
+      if (mounted) setState(() => _isLoadingInitial = false);
     }
   }
 
-  // ✅ [FIXED] Fetch AI & Update Profile: Sửa fullName -> username
-  Future<void> _fetchAiSuggestions() async {
-    setState(() => _isLoadingAi = true);
+  Future<void> _handleRefresh() async {
+    await Future.wait([
+      _loadUserProfile(),
+      _fetchAllRecipes(),
+      _checkUnreadNotifications(),
+    ]);
+  }
+
+  Future<void> _loadUserProfile() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      String? userId = prefs.getString('userId');
+      final profileData = await _authService.getUserProfile();
 
-      if (userId == null) {
-        String? userDataString = prefs.getString('user_data');
-        if (userDataString != null) {
-          final data = jsonDecode(userDataString);
-          userId = data['_id'] ?? data['id'];
-        }
-      }
+      if (mounted && profileData != null) {
+        setState(() {
+          _currentName = profileData['username'] ?? profileData['name'] ?? "Chef";
+          _currentAvatar = _formatImageUrl(profileData['image']);
+          
+          // Lấy danh sách gợi ý AI (có chứa bữa Sáng/Trưa/Chiều)
+          _aiRecommendations = profileData['ai_meal_suggestions'] ?? [];
+        });
 
-      if (userId != null) {
-        final authService = AuthService();
-        final profileData = await authService.getUserProfile(userId);
-
-        if (mounted && profileData != null) {
-          setState(() {
-            _aiRecommendations = profileData['ai_meal_suggestions'] ?? [];
-            _isLoadingAi = false;
-            
-            // Cập nhật lại avatar từ profile mới nhất nếu có
-            if (profileData['image'] != null) {
-               String img = profileData['image'];
-               if (img.startsWith('http')) {
-                  _currentAvatar = img;
-               } else {
-                  String path = img.startsWith('/') ? img.substring(1) : img;
-                  _currentAvatar = "$baseUrl/$path?t=${DateTime.now().millisecondsSinceEpoch}";
-               }
-            }
-            // Cập nhật tên mới nhất (Ưu tiên username)
-            if (profileData['username'] != null) {
-               _currentName = profileData['username'];
-            } else if (profileData['fullName'] != null) {
-               // Fallback nếu backend trong tương lai đổi ý dùng fullName
-               _currentName = profileData['fullName'];
-            }
-          });
-        }
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user_cache_name', _currentName);
+        await prefs.setString('user_cache_avatar', _currentAvatar);
       } else {
-        setState(() => _isLoadingAi = false);
+        _loadFromCache();
       }
     } catch (e) {
-      debugPrint("❌ Lỗi tải gợi ý AI: $e");
-      if (mounted) setState(() => _isLoadingAi = false);
+      debugPrint("❌ Lỗi Load Profile: $e");
+      _loadFromCache();
     }
   }
 
-  Future<String> _fetchRealImage(String query) async {
-    if (_imageCache.containsKey(query)) {
-      return _imageCache[query]!;
+  Future<void> _loadFromCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _currentName = prefs.getString('user_cache_name') ?? "Chef";
+        _currentAvatar = prefs.getString('user_cache_avatar') ?? "";
+      });
     }
-
-    final String searchUrl =
-        "https://www.googleapis.com/customsearch/v1?q=$query vietnamese food dish&cx=$_googleCxId&key=$_googleApiKey&searchType=image&num=1&imgSize=large";
-
-    try {
-      final response = await http.get(Uri.parse(searchUrl));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['items'] != null && data['items'].isNotEmpty) {
-          String realUrl = data['items'][0]['link'];
-          _imageCache[query] = realUrl;
-          return realUrl;
-        }
-      }
-    } catch (e) {
-      debugPrint("Lỗi Google API Exception: $e");
-    }
-
-    // Fallback AI Image nếu Google API lỗi hoặc hết quota
-    String aiUrl =
-        "https://image.pollinations.ai/prompt/${Uri.encodeComponent(query)}%20vietnamese%20food%20photorealistic";
-    _imageCache[query] = aiUrl;
-    return aiUrl;
   }
 
   Future<void> _fetchAllRecipes() async {
-    setState(() => _isLoadingRecipes = true);
-
     try {
-      final result = await RecipeService.getAllRecipes();
+      final result = await RecipeService.getAllRecipes(
+        mealTimeTags: _currentFilters['mealTimeTags']?.join(','),
+        dietTags: _currentFilters['dietTags']?.join(','),
+        regionTags: _currentFilters['regionTags']?.join(','),
+        dishtypeTags: _currentFilters['dishtypeTags']?.join(','),
+      );
 
-      if (mounted) {
-        setState(() {
-          if (result['success'] == true) {
-            _allRecipes = result['data'] ?? [];
-          } else {
-            print("⚠️ Lỗi server: ${result['message']}");
-          }
-        });
+      if (mounted && result['success'] == true) {
+        setState(() => _allRecipes = result['data'] ?? []);
       }
     } catch (e) {
-      print("❌ Lỗi Crash Home: $e");
-    } finally {
-      if (mounted) {
-        setState(() => _isLoadingRecipes = false);
-      }
+      debugPrint("❌ Lỗi API Recipes: $e");
     }
   }
 
-  Future<void> _handleToggleFavorite(String recipeId, int index) async {
+  Future<void> _checkUnreadNotifications() async {
     try {
-      // 1. Gọi API toggle
-      bool newStatus = await RecipeService.toggleFavorite(recipeId);
-
-      // 2. Cập nhật lại trạng thái trong danh sách _allRecipes để UI đổi màu tim ngay lập tức
-      setState(() {
-        _allRecipes[index]['isFavorite'] = newStatus;
-      });
-
-      // 3. Thông báo
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(newStatus ? "Đã thêm vào yêu thích ❤️" : "Đã bỏ yêu thích 💔"),
-            duration: const Duration(seconds: 1),
-          ),
-        );
+      final result = await RecipeService.getNotifications();
+      if (result['success'] == true && mounted) {
+        List<dynamic> notis = result['data'] ?? [];
+        setState(() =>
+            _hasUnreadNotifications = notis.any((n) => n['isRead'] == false));
       }
     } catch (e) {
-      print("Lỗi toggle favorite: $e");
+      debugPrint("Lỗi Notification: $e");
     }
   }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-    _pageController.dispose();
-    super.dispose();
+  String _formatImageUrl(String? img) {
+    if (img == null || img.isEmpty || img.contains('default')) return "";
+    if (img.startsWith('http')) return img;
+    String path = img.startsWith('/') ? img.substring(1) : img;
+    return "$baseUrl/$path";
   }
+
+  Future<void> _handleLogout() async {
+    await _authService.logout();
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+  }
+
+  // ============================================================
+  // UI BUILDERS
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: primaryBackground,
         appBar: _buildAppBar(),
-        body: _buildBody(),
-        bottomNavigationBar: _buildBottomNav(),
         endDrawer: _buildAppDrawer(),
+        bottomNavigationBar: _buildBottomNav(),
+        body: _isLoadingInitial
+            ? Center(child: CircularProgressIndicator(color: primaryColor))
+            : RefreshIndicator(
+                onRefresh: _handleRefresh,
+                color: primaryColor,
+                displacement: 40,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Column(
+                    children: [
+                      if (widget.initialRecipes != null && widget.initialRecipes!.isNotEmpty)
+                        _buildSurveyResultBanner(),
+                        
+                      _buildBanner(), // Banner AI (Đã sửa lại hiển thị bữa)
+                      _buildSearchBar(),
+                      _buildActionButtons(),
+                      _buildRecipeList(),
+                      const SizedBox(height: 100),
+                    ],
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildSurveyResultBanner() {
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFE8F5E9),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle, size: 16, color: primaryColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              "Thực đơn được cá nhân hóa cho bạn",
+              style: GoogleFonts.inter(
+                  color: primaryColor, fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+          ),
+          InkWell(
+            onTap: _fetchAllRecipes, // Reload lại nếu muốn thoát chế độ lọc
+            child: const Icon(Icons.close, size: 16, color: Colors.grey),
+          )
+        ],
       ),
     );
   }
@@ -304,294 +263,82 @@ class _HomePageState extends State<HomePage> {
     return AppBar(
       backgroundColor: primaryBackground,
       automaticallyImplyLeading: false,
-      elevation: 0.0,
-      centerTitle: false,
+      elevation: 0,
       title: Row(
         children: [
-          Container(
-            width: 45.0,
-            height: 45.0,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: primaryColor, width: 2.0),
-              image: DecorationImage(
-                fit: BoxFit.cover,
-                image: _currentAvatar.isNotEmpty
-                    ? NetworkImage(_currentAvatar)
-                    : const NetworkImage(
-                        'https://images.unsplash.com/photo-1522075793577-0e6b86be585b?ixlib=rb-4.1.0&q=80&w=1080'),
-              ),
-            ),
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: primaryColor,
+            backgroundImage: _currentAvatar.isNotEmpty
+                ? NetworkImage(_currentAvatar)
+                : const NetworkImage(
+                    'https://images.unsplash.com/photo-1522075793577-0e6b86be585b?q=80&w=100'),
           ),
-          const SizedBox(width: 12.0),
+          const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Chào Mừng ',
-                  style: GoogleFonts.inter(color: secondaryText, fontSize: 12.0)),
-              Text(_currentName, // Đã fix logic lấy tên
+              Text('Xin chào,',
+                  style: GoogleFonts.inter(color: secondaryText, fontSize: 12)),
+              Text(_currentName,
                   style: GoogleFonts.interTight(
                       color: primaryText,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 18.0)),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18)),
             ],
           ),
         ],
       ),
       actions: [
-        // ✅ NÚT THÔNG BÁO (NOTIFICATION)
-        Padding(
-          padding: const EdgeInsets.only(right: 8.0),
-          child: InkWell(
-            onTap: () async {
-              // Chuyển sang màn hình thông báo
-              await Navigator.push(
+        _buildCircleIconButton(
+          icon: _hasUnreadNotifications
+              ? Icons.notifications_active
+              : Icons.notifications_none,
+          iconColor: _hasUnreadNotifications ? orangeAccent : primaryText,
+          onTap: () async {
+            await Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-              );
-              // Khi quay về, kiểm tra lại xem user đã đọc chưa để tắt chấm đỏ
-              _checkUnreadNotifications();
-            },
-            borderRadius: BorderRadius.circular(12.0),
-            child: Container(
-              width: 45,
-              height: 45,
-              decoration: BoxDecoration(
-                color: secondaryBackground,
-                borderRadius: BorderRadius.circular(12.0),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Icon(Icons.notifications_outlined, color: primaryText, size: 24.0),
-
-                  // 🔴 CHẤM ĐỎ (BADGE)
-                  if (_hasUnreadNotifications)
-                    Positioned(
-                      top: 10,
-                      right: 10,
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: errorColor, // Màu đỏ
-                          shape: BoxShape.circle,
-                          border: Border.all(color: secondaryBackground, width: 1.5),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
+                MaterialPageRoute(
+                    builder: (context) => const NotificationsScreen()));
+            _checkUnreadNotifications();
+          },
         ),
-
-        // NÚT MENU (DRAWER)
-        Padding(
-          padding: const EdgeInsets.only(right: 16.0),
-          child: Container(
-            decoration: BoxDecoration(
-                color: secondaryBackground,
-                borderRadius: BorderRadius.circular(12.0)),
-            child: IconButton(
-              icon: Icon(Icons.menu, color: primaryText, size: 24.0),
-              onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-            ),
-          ),
+        const SizedBox(width: 8),
+        _buildCircleIconButton(
+          icon: Icons.menu,
+          onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
         ),
+        const SizedBox(width: 16),
       ],
     );
   }
 
-  Widget _buildBottomNav() {
-    return BottomNavigationBar(
-      currentIndex: _selectedIndex,
-      type: BottomNavigationBarType.fixed,
-      backgroundColor: secondaryBackground,
-      selectedItemColor: primaryColor,
-      unselectedItemColor: secondaryText,
-      onTap: (int index) async {
-        if (index == _selectedIndex) return;
-        switch (index) {
-          case 0:
-            setState(() => _selectedIndex = index);
-            break;
-          case 1:
-            Navigator.pushReplacement(context,
-                MaterialPageRoute(builder: (context) => const MyRecipeScreen()));
-            break;
-          case 2:
-            final result = await Navigator.push(context,
-                MaterialPageRoute(builder: (context) => const AddRecipeScreen())
-              );
-              if (result == true) {
-                print("🔄 Đang làm mới trang chủ...");
-                _fetchAllRecipes();
-                setState(() => _selectedIndex = 0);
-              }
-            break;
-          case 3:
-            Navigator.pushReplacement(context,
-                MaterialPageRoute(builder: (context) => const PantryScreen()));
-            break;
-          case 4:
-            await Navigator.push(context,
-                MaterialPageRoute(builder: (context) => const SettingsScreen()));
-            _loadUserData();
-            break;
-        }
-      },
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.book), label: 'My Recipe'),
-        BottomNavigationBarItem(
-            icon: Icon(Icons.add_circle_outline, size: 36.0), label: ''),
-        BottomNavigationBarItem(icon: Icon(Icons.kitchen), label: 'Pantry'),
-        BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Setting'),
-      ],
-    );
-  }
-
-  Widget _buildAppDrawer() {
-    return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          UserAccountsDrawerHeader(
-            accountName: Text(_currentName,
-                style: GoogleFonts.interTight(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18)),
-            accountEmail: const Text(''),
-            currentAccountPicture: CircleAvatar(
-              backgroundImage: _currentAvatar.isNotEmpty
-                  ? NetworkImage(_currentAvatar)
-                  : const NetworkImage(
-                      'https://images.unsplash.com/photo-1522075793577-0e6b86be585b?ixlib=rb-4.1.0&q=80&w=1080'),
-              backgroundColor: Colors.white,
-            ),
-            decoration: BoxDecoration(color: primaryColor),
-          ),
-          ListTile(
-              leading: Icon(Icons.add_circle_outline, color: secondaryText),
-              title: Text('Add Recipe',
-                  style: GoogleFonts.inter(color: primaryText)),
-              onTap: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (context) => const AddRecipeScreen()))),
-          ListTile(
-              leading: Icon(Icons.kitchen, color: secondaryText),
-              title: Text('Pantry', style: GoogleFonts.inter(color: primaryText)),
-              onTap: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (context) => const PantryScreen()))),
-          ListTile(
-              leading: Icon(Icons.bookmark_border, color: secondaryText),
-              title: Text('Bookmark', style: GoogleFonts.inter(color: primaryText)),
-              onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const MarkdownRecipeScreen()))),
-          const Divider(),
-          ListTile(
-              leading: Icon(Icons.settings_outlined, color: secondaryText),
-              title: Text('Settings', style: GoogleFonts.inter(color: primaryText)),
-              onTap: () async {
-                Navigator.pop(context);
-                await Navigator.push(context,
-                    MaterialPageRoute(builder: (context) => const SettingsScreen()));
-                _loadUserData();
-              }),
-          ListTile(
-              leading: Icon(Icons.info_outline, color: secondaryText),
-              title: Text('About Us', style: GoogleFonts.inter(color: primaryText)),
-              onTap: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (context) => const AboutUsScreen()))),
-          ListTile(
-              leading: Icon(Icons.notifications_outlined, color: secondaryText),
-              title:
-                  Text('Notification', style: GoogleFonts.inter(color: primaryText)),
-              onTap: () async {
-                 Navigator.pop(context); // Đóng drawer trước
-                 await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const NotificationsScreen()));
-                 _checkUnreadNotifications();
-              }),
-          ListTile(
-              leading: Icon(Icons.contact_mail_outlined, color: secondaryText),
-              title:
-                  Text('Contact Us', style: GoogleFonts.inter(color: primaryText)),
-              onTap: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (context) => const ContactUsScreen()))),
-          const Divider(),
-          ListTile(
-              leading: Icon(Icons.logout_outlined, color: errorColor),
-              title: Text('Logout', style: GoogleFonts.inter(color: errorColor)),
-              onTap: () => Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (context) => const LoginScreen()),
-                  (route) => false)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBody() {
-    return SafeArea(
-      child: SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildBanner(),
-            _buildSearchBar(),
-            _buildActionButtons(),
-            _buildRecipeList(),
-            const SizedBox(height: 100),
-          ],
-        ),
-      ),
-    );
-  }
-
+  // --- PHẦN BANNER AI (ĐÃ SỬA LẠI) ---
   Widget _buildBanner() {
-    if (_isLoadingAi) {
-      return Container(
-          height: 260,
-          margin: const EdgeInsets.all(20),
-          child: const Center(child: CircularProgressIndicator()));
-    }
-    if (_aiRecommendations.isEmpty) {
-      return Container(
-          height: 100,
-          margin: const EdgeInsets.all(20),
-          alignment: Alignment.center,
-          child: Text("Chưa có gợi ý nào.",
-              style: GoogleFonts.inter(color: secondaryText)));
-    }
-
+    if (_aiRecommendations.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20.0, 20.0, 20.0, 12.0),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("Gợi ý cho bạn (AI)",
+              Text("Thực đơn hôm nay (AI)",
                   style: GoogleFonts.interTight(
-                      fontSize: 20.0,
-                      fontWeight: FontWeight.bold,
-                      color: primaryText)),
+                      fontSize: 20, fontWeight: FontWeight.bold)),
               Icon(Icons.auto_awesome, color: orangeAccent),
             ],
           ),
         ),
         SizedBox(
-          height: 260.0,
+          height: 220, // Giảm chiều cao chút cho cân đối
           child: PageView.builder(
             controller: _pageController,
             itemCount: _aiRecommendations.length,
             itemBuilder: (context, index) {
-              return _buildRecommendationCard(_aiRecommendations[index]);
+              final item = _aiRecommendations[index];
+              return _buildAiCard(item);
             },
           ),
         ),
@@ -599,115 +346,106 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildRecommendationCard(dynamic item) {
-    final String foodName = item['name']?.toString() ?? "Món ngon";
-    final String time = item['time']?.toString() ?? "30p";
-    final String calories = "${item['calories']?.toString() ?? '0'} Kcal";
+  Widget _buildAiCard(dynamic item) {
+    // 1. Lấy tên món và tên bữa (Sáng/Trưa/Tối)
+    String foodName = "";
+    String mealTime = "";
 
-    return FutureBuilder<String>(
-      future: _fetchRealImage(foodName),
+    if (item is String) {
+      foodName = item;
+      mealTime = "Gợi ý";
+    } else {
+      foodName = item['dishName'] ?? item['name'] ?? item['dish'] ?? "Món ngon";
+      // Các key thường gặp cho bữa ăn từ AI
+      mealTime = item['meal'] ?? item['time'] ?? item['buoi'] ?? "Gợi ý";
+    }
+
+    return FutureBuilder<String?>(
+      future: UtilService.searchImage(foodName),
       builder: (context, snapshot) {
-        String imageUrl =
-            snapshot.data ?? "https://via.placeholder.com/400x300?text=Loading...";
-        bool isLoaded = snapshot.hasData && snapshot.data != null;
+        // 2. FIX ẢNH: Thêm từ khóa 'cooked food dish photorealistic' để AI vẽ đúng món ăn
+        String safeQuery = Uri.encodeComponent("$foodName cooked food dish photorealistic");
+        String imgUrl = snapshot.data ?? "https://image.pollinations.ai/prompt/$safeQuery";
 
         return InkWell(
-          onTap: () {
-            final Map<String, dynamic> dataToSend = {
-              ...item,
-              'image': imageUrl,
-              'description': item['description'] ??
-                  "Món ăn gợi ý được cá nhân hóa bởi AI.",
-              'ingredients':
-                  item['ingredients'] is List ? item['ingredients'] : [],
-              'instructions':
-                  item['instructions'] is List ? item['instructions'] : [],
-            };
-
-            Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => BlogScreen(
-                          recipeData: dataToSend,
-                        )));
-          },
+          onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => BlogScreen(recipeData: {
+                        ...((item is Map) ? item : {}),
+                        'image': imgUrl,
+                        'name': foodName,
+                        'description': "Gợi ý cho $mealTime"
+                      }))),
           child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 20.0),
+            margin: const EdgeInsets.symmetric(horizontal: 8), // Margin nhỏ lại để PageView đẹp hơn
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              image: DecorationImage(
+                  image: NetworkImage(imgUrl), 
+                  fit: BoxFit.cover,
+                  // Thêm loadingBuilder để không bị nháy trắng
+                  onError: (_, __) => const AssetImage('assets/images/placeholder_food.png') // Fallback nếu lỗi
+              ),
+              boxShadow: [
+                 BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5)
+                 )
+              ]
+            ),
             child: Stack(
-              fit: StackFit.expand,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(24.0),
-                  child: isLoaded
-                      ? Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (ctx, child, loading) => loading == null
-                              ? child
-                              : Container(
-                                  color: Colors.grey[200],
-                                  child: const Center(
-                                      child: CircularProgressIndicator())),
-                          errorBuilder: (ctx, err, stack) => Container(
-                              color: Colors.grey[300],
-                              child: const Icon(Icons.broken_image)),
-                        )
-                      : Container(
-                          color: Colors.grey[200],
-                          child: const Center(child: CircularProgressIndicator()),
-                        ),
-                ),
+                // Gradient mờ bên dưới để chữ dễ đọc
                 Container(
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(24.0),
+                    borderRadius: BorderRadius.circular(24),
                     gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
                           Colors.transparent,
-                          Colors.black.withOpacity(0.8)
+                          Colors.black.withOpacity(0.7)
                         ]),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                              color: Colors.orange,
-                              borderRadius: BorderRadius.circular(10)),
-                          child: Text(item['session'] ?? "Suggestion",
-                              style: const TextStyle(
-                                  color: Colors.white, fontSize: 10))),
-                      const SizedBox(height: 8),
-                      Text(foodName,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.interTight(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      Row(children: [
-                        const Icon(Icons.timer, color: Colors.white70, size: 16),
-                        const SizedBox(width: 4),
-                        Text(time,
-                            style:
-                                const TextStyle(color: Colors.white, fontSize: 12)),
-                        const SizedBox(width: 16),
-                        const Icon(Icons.local_fire_department,
-                            color: Colors.white70, size: 16),
-                        const SizedBox(width: 4),
-                        Text(calories,
-                            style:
-                                const TextStyle(color: Colors.white, fontSize: 12))
-                      ]),
-                    ],
+                
+                // 3. HIỂN THỊ TÊN MÓN (Góc dưới)
+                Positioned(
+                  bottom: 20,
+                  left: 20,
+                  right: 20,
+                  child: Text(foodName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.interTight(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold)),
+                ),
+
+                // 4. HIỂN THỊ BỮA ĂN (Sáng/Trưa/Tối) - Góc trên trái
+                Positioned(
+                  top: 20,
+                  left: 20,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: primaryColor.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: const [
+                         BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
+                      ]
+                    ),
+                    child: Text(
+                      mealTime.toUpperCase(), // VIẾT HOA BỮA ĂN
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -717,42 +455,156 @@ class _HomePageState extends State<HomePage> {
       },
     );
   }
+  // --- HẾT PHẦN BANNER AI ---
 
   Widget _buildSearchBar() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
       child: TextFormField(
         controller: _searchController,
-        focusNode: _searchFocusNode,
-        onChanged: (value) => setState(() {
-          _searchQuery = value;
-        }),
+        onChanged: (v) => setState(() => _searchQuery = v),
         decoration: InputDecoration(
-          hintText: 'Search recipes...',
+          hintText: 'Tìm món ăn...',
           filled: true,
           fillColor: secondaryBackground,
           prefixIcon: Icon(Icons.search, color: secondaryText),
           border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(30.0),
+              borderRadius: BorderRadius.circular(30),
               borderSide: BorderSide.none),
+          contentPadding:
+              const EdgeInsets.symmetric(vertical: 0, horizontal: 20),
         ),
       ),
     );
   }
 
+  Widget _buildAppDrawer() {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          UserAccountsDrawerHeader(
+            decoration: BoxDecoration(color: primaryColor),
+            accountName: Text(_currentName,
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            accountEmail: null,
+            currentAccountPicture: CircleAvatar(
+              backgroundImage: _currentAvatar.isNotEmpty
+                  ? NetworkImage(_currentAvatar)
+                  : const NetworkImage(
+                      'https://images.unsplash.com/photo-1522075793577-0e6b86be585b?q=80&w=100'),
+            ),
+          ),
+          _buildDrawerItem(Icons.settings_outlined, "Cài đặt", () async {
+            await Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const SettingsScreen()));
+            _loadUserProfile();
+          }),
+          _buildDrawerItem(
+              Icons.info_outline,
+              "Về chúng tôi",
+              () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const AboutUsScreen()))),
+          _buildDrawerItem(
+              Icons.contact_support_outlined,
+              "Liên hệ",
+              () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const ContactUsScreen()))),
+          const Divider(),
+          _buildDrawerItem(Icons.logout, "Đăng xuất", _handleLogout,
+              color: errorColor),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomNav() {
+    return BottomNavigationBar(
+      currentIndex: _selectedIndex,
+      type: BottomNavigationBarType.fixed,
+      selectedItemColor: primaryColor,
+      showUnselectedLabels: true,
+      onTap: (i) {
+        if (i == 0) return;
+
+        Widget nextScreen;
+        switch (i) {
+          case 1:
+            nextScreen = const MyRecipeScreen();
+            break;
+          case 2:
+            nextScreen = const AddRecipeScreen();
+            break;
+          case 3:
+            nextScreen = const PantryScreen();
+            break;
+          case 4:
+            nextScreen = const SettingsScreen();
+            break;
+          default:
+            return;
+        }
+
+        Navigator.push(context,
+                MaterialPageRoute(builder: (context) => nextScreen))
+            .then((_) {
+          if (i == 2 || i == 4) _handleRefresh();
+        });
+      },
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Trang chủ'),
+        BottomNavigationBarItem(icon: Icon(Icons.book), label: 'Của tôi'),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.add_circle, size: 40, color: Color(0xFF568C4C)),
+            label: ''),
+        BottomNavigationBarItem(icon: Icon(Icons.kitchen), label: 'Tủ lạnh'),
+        BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Cài đặt'),
+      ],
+    );
+  }
+
+  Widget _buildCircleIconButton(
+      {required IconData icon, Color? iconColor, required VoidCallback onTap}) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+          color: secondaryBackground, borderRadius: BorderRadius.circular(12)),
+      child: IconButton(
+          icon: Icon(icon, color: iconColor ?? primaryText, size: 24),
+          onPressed: onTap),
+    );
+  }
+
   Widget _buildActionButtons() {
+    bool isFilterActive = _currentFilters.values.any((l) => l.isNotEmpty);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20.0, 20.0, 20.0, 0.0),
+      padding: const EdgeInsets.all(20),
       child: Row(
         children: [
-          _buildActionButton(
+          _buildSquareBtn(
               icon: Icons.filter_list,
-              onTap: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (context) => const FilterScreen()))),
-          const SizedBox(width: 12.0),
-          _buildActionButton(
+              color: isFilterActive ? primaryColor : null,
+              onTap: () async {
+                final res = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) =>
+                            FilterScreen(currentFilters: _currentFilters)));
+                if (res != null) {
+                  setState(() => _currentFilters = res);
+                  _fetchAllRecipes();
+                }
+              }),
+          const SizedBox(width: 12),
+          _buildSquareBtn(
               icon: Icons.bookmark_border,
-              borderColor: primaryText,
               onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -762,106 +614,100 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildActionButton(
-      {required IconData icon, Color? borderColor, required VoidCallback onTap}) {
-    return Container(
-      width: 80.0,
-      height: 80.0,
-      decoration: BoxDecoration(
-          color: secondaryBackground,
-          borderRadius: BorderRadius.circular(20.0),
-          border: borderColor != null
-              ? Border.all(color: borderColor)
-              : Border.all(color: alternateBorder)),
-      child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(20.0),
-          child: Icon(icon, color: primaryText, size: 30.0)),
+  Widget _buildSquareBtn(
+      {required IconData icon, Color? color, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        width: 60,
+        height: 60,
+        decoration: BoxDecoration(
+            color: secondaryBackground,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: color ?? const Color(0xFFE0E3E7),
+                width: color != null ? 2 : 1)),
+        child: Icon(icon, color: primaryText),
+      ),
     );
   }
 
   Widget _buildRecipeList() {
-    if (_isLoadingRecipes) {
-      return const Padding(
-          padding: EdgeInsets.all(20.0),
-          child: Center(child: CircularProgressIndicator()));
+    final filtered = _allRecipes
+        .where((r) => (r['name'] ?? r['title'] ?? "")
+            .toString()
+            .toLowerCase()
+            .contains(_searchQuery.toLowerCase()))
+        .toList();
+
+    if (filtered.isEmpty) {
+      return Padding(
+          padding: const EdgeInsets.all(40),
+          child: Center(
+              child: Text("Không tìm thấy món ăn",
+                  style: GoogleFonts.inter(color: secondaryText))));
     }
 
-    final filteredRecipes = _allRecipes.where((recipe) {
-      final title = recipe['name'] ?? recipe['title'] ?? "";
-      final matchSearch = title.toLowerCase().contains(_searchQuery.toLowerCase());
-      final matchCategory =
-          _selectedCategory == "All" || recipe['category'] == _selectedCategory;
-      return matchSearch && matchCategory;
-    }).toList();
-
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(0, 20.0, 0, 100.0),
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: filteredRecipes.length + 1, // +1 cho tiêu đề
+      itemCount: filtered.length + 1,
       itemBuilder: (context, i) {
-        if (i == 0) {
-           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-            child: Text("Cộng đồng chia sẻ",
-                style: GoogleFonts.interTight(
-                    fontSize: 20.0,
-                    fontWeight: FontWeight.bold,
-                    color: primaryText)));
-        }
+        if (i == 0)
+          return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Text("Cộng đồng chia sẻ",
+                  style: GoogleFonts.interTight(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: primaryText)));
+        final recipe = filtered[i - 1];
+        String img = _formatImageUrl(recipe['image']);
 
-        final recipe = filteredRecipes[i - 1]; // Trừ 1 vì index 0 là title
-        
-        // Tìm index thực tế trong list gốc để update state
-        final realIndex = _allRecipes.indexOf(recipe); 
-
-        String rawImage = recipe['image'] ?? "";
-        String fullImageUrl = "";
-        if (rawImage.startsWith("http")) {
-           fullImageUrl = rawImage;
-        } else if (rawImage.isNotEmpty) {
-           String path = rawImage.startsWith('/') ? rawImage : "/$rawImage";
-           fullImageUrl = "$baseUrl$path"; 
-        } else {
-           fullImageUrl = "https://via.placeholder.com/400x300?text=No+Image";
-        }
-
-        return Column(
-          children: [
-            InkWell(
-              onTap: () => Navigator.push(
+        return InkWell(
+          onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (context) => BlogScreen(
-                            recipeData: {
-                              ...recipe,
-                              'image': fullImageUrl,
-                            }))).then((_) {
-                              // Khi quay lại từ BlogScreen, load lại list để cập nhật like/view
-                              _fetchAllRecipes(); 
-                            }),
-              child: _buildRecipeCard(
-                imageUrl: fullImageUrl,
-                title: recipe['name'] ?? recipe['title'] ?? "Chưa đặt tên",
-                description: recipe['description'] ?? "Không có mô tả",
-                time: recipe['cookTimeMinutes'] != null
-                    ? "${recipe['cookTimeMinutes']} phút"
-                    : (recipe['time'] ?? "30 phút"),
-                servings: "${recipe['servings'] ?? 2} người",
-                isFavorite: recipe['isFavorite'] ?? false,
-                // 👇 QUAN TRỌNG: Truyền hàm xử lý tim vào đây
-                onFavoritePressed: () {
-                   String id = recipe['_id'] ?? recipe['id'];
-                   _handleToggleFavorite(id, realIndex);
-                },
-              ),
-            ),
-            const SizedBox(height: 16.0),
-          ],
+                      builder: (context) =>
+                          BlogScreen(recipeData: {...recipe, 'image': img})))
+              .then((_) => _fetchAllRecipes()),
+          child: _buildRecipeCard(
+            imageUrl: img,
+            title: recipe['name'] ?? "Chưa đặt tên",
+            description: recipe['description'] ?? "Món ngon mỗi ngày",
+            time: recipe['cookTimeMinutes'] != null
+                ? "${recipe['cookTimeMinutes']} phút"
+                : (recipe['time'] ?? "30 phút"),
+            servings: "${recipe['servings'] ?? 2} người",
+            isSaved: recipe['isSaved'] ?? recipe['isFavorite'] ?? false,
+            onBookmark: () async {
+              String id = recipe['_id'] ?? recipe['id'];
+              final result = await RecipeService.toggleSave(id);
+              if (mounted && result['success'] == false) {
+                bool isSavedNow = result['isSaved'] ?? false;
+                ScaffoldMessenger.of(context).clearSnackBars();
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(isSavedNow ? "Đã lưu!" : "Đã bỏ lưu",
+                      style: const TextStyle(color: Colors.white)),
+                  backgroundColor: isSavedNow ? primaryColor : secondaryText,
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 1),
+                ));
+                _fetchAllRecipes(); // Refresh để update icon
+              }
+            },
+          ),
         );
       },
     );
+  }
+
+  Widget _buildDrawerItem(IconData icon, String title, VoidCallback onTap,
+      {Color? color}) {
+    return ListTile(
+        leading: Icon(icon, color: color ?? secondaryText),
+        title: Text(title, style: TextStyle(color: color ?? primaryText)),
+        onTap: onTap);
   }
 
   Widget _buildRecipeCard(
@@ -870,85 +716,64 @@ class _HomePageState extends State<HomePage> {
       required String description,
       required String time,
       required String servings,
-      required bool isFavorite,
-      required VoidCallback onFavoritePressed}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0),
-      child: Container(
-        decoration: BoxDecoration(
-            color: secondaryBackground,
-            boxShadow: [
-              BoxShadow(
-                  blurRadius: 8.0, color: shadowColor, offset: const Offset(0.0, 2.0))
-            ],
-            borderRadius: BorderRadius.circular(15.0)),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12.0),
-                child: Image.network(imageUrl,
-                    width: double.infinity,
-                    height: 180.0,
-                    fit: BoxFit.cover,
-                    errorBuilder: (ctx, err, stack) => Container(
-                        height: 180,
-                        color: Colors.grey[200],
-                        child: const Icon(Icons.fastfood))),
-              ),
-              Padding(
-                  padding: const EdgeInsets.only(top: 12.0),
-                  child: Text(title,
-                      style: GoogleFonts.interTight(
-                          color: primaryText,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 18.0))),
-              Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
-                  child: Text(description,
-                      style: GoogleFonts.inter(
-                          color: secondaryText, fontSize: 12.0))),
-              Padding(
-                padding: const EdgeInsets.only(top: 12.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(children: [
-                      Icon(Icons.schedule, color: orangeAccent, size: 16.0),
-                      const SizedBox(width: 8.0),
-                      Text(time,
-                          style: GoogleFonts.inter(
-                              color: secondaryText, fontSize: 12.0)),
-                      const SizedBox(width: 12.0),
-                      Icon(Icons.people, color: successColor, size: 16.0),
-                      const SizedBox(width: 8.0),
-                      Text("$servings servings",
-                          style: GoogleFonts.inter(
-                              color: secondaryText, fontSize: 12.0))
-                    ]),
-                    Container(
-                        width: 35.0,
-                        height: 35.0,
-                        decoration: BoxDecoration(
-                            color: kCardBackground, shape: BoxShape.circle),
-                        child: IconButton(
-                            icon: Icon(
-                                isFavorite
-                                    ? Icons.bookmark
-                                    : Icons.bookmark_border,
-                                color: primaryColor,
-                                size: 18.0),
-                            onPressed: onFavoritePressed
-                          )),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      required bool isSaved,
+      required VoidCallback onBookmark}) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+          color: secondaryBackground,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+                color: const Color(0x1A000000),
+                blurRadius: 4,
+                offset: const Offset(0, 2))
+          ]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(imageUrl,
+                height: 160,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                    height: 160,
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.broken_image)))),
+        const SizedBox(height: 12),
+        Text(title,
+            style: GoogleFonts.interTight(
+                fontWeight: FontWeight.bold, fontSize: 16)),
+        Text(description,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: secondaryText, fontSize: 12)),
+        const SizedBox(height: 12),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Row(children: [
+            Icon(Icons.access_time, size: 16, color: orangeAccent),
+            const SizedBox(width: 4),
+            Text(time, style: const TextStyle(fontSize: 12)),
+            const SizedBox(width: 12),
+            const Icon(Icons.people_outline,
+                size: 16, color: Color(0xFF4FB239)),
+            const SizedBox(width: 4),
+            Text(servings, style: const TextStyle(fontSize: 12)),
+          ]),
+          IconButton(
+              icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border,
+                  color: isSaved ? primaryColor : secondaryText),
+              onPressed: onBookmark),
+        ])
+      ]),
     );
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _pageController.dispose();
+    super.dispose();
   }
 }

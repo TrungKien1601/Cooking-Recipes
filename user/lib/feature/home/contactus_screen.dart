@@ -86,8 +86,6 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                 children: [
                   _buildHeader(),
                   const SizedBox(height: 32.0),
-                  _buildContactInfoCard(),
-                  const SizedBox(height: 32.0),
                   _buildContactForm(),
                 ],
               ),
@@ -127,7 +125,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Get In Touch',
+          'Hãy Liên Hệ Với Chúng Tôi',
           style: GoogleFonts.interTight(
             color: kColorPrimaryText,
             fontSize: 28.0, // headlineMedium
@@ -136,7 +134,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
         ),
         const SizedBox(height: 8.0),
         Text(
-          "We'd love to hear from you. Fill out the form below or use our contact details.",
+          "Chúng tôi rất vui được lắng nghe ý kiến và phản hồi từ bạn. Hãy gửi cho chúng tôi bất kỳ câu hỏi, đề xuất hoặc thắc mắc nào bạn có về ứng dụng hoặc dịch vụ của chúng tôi. Đội ngũ hỗ trợ khách hàng của chúng tôi sẽ phản hồi bạn trong thời gian sớm nhất có thể.",
           style: GoogleFonts.inter(
             color: kColorSecondaryText,
             fontSize: 16.0, // bodyLarge
@@ -144,43 +142,6 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  // Thẻ thông tin (Email, Phone, Address)
-  Widget _buildContactInfoCard() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: kColorCard,
-        borderRadius: BorderRadius.circular(12.0),
-        border: Border.all(color: kColorBorder, width: 1.0),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildInfoRow(
-              icon: Icons.email_outlined,
-              title: 'Email',
-              subtitle: 'contact@recipeapp.com',
-            ),
-            const Divider(height: 32.0, color: kColorBorder),
-            _buildInfoRow(
-              icon: Icons.phone_outlined,
-              title: 'Phone',
-              subtitle: '+1 (555) 123-4567',
-            ),
-            const Divider(height: 32.0, color: kColorBorder),
-            _buildInfoRow(
-              icon: Icons.location_on_outlined,
-              title: 'Address',
-              subtitle: '123 Recipe Lane, Food City, USA',
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -229,7 +190,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Send us a Message',
+            'Hãy gửi cho chúng tôi lời nhắn',
             style: GoogleFonts.interTight(
               color: kColorPrimaryText,
               fontSize: 28.0,
@@ -239,11 +200,11 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
           const SizedBox(height: 24.0),
           _buildTextField(
             controller: _nameController,
-            label: 'Your Name',
-            hint: 'Enter your name',
+            label: 'Tên của bạn',
+            hint: 'Nhập tên của bạn',
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Please enter your name';
+                return 'Vui lòng nhập tên của bạn';
               }
               return null;
             },
@@ -251,15 +212,15 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
           const SizedBox(height: 16.0),
           _buildTextField(
             controller: _emailController,
-            label: 'Your Email',
-            hint: 'Enter your email',
+            label: 'Email của bạn',
+            hint: 'Nhập email của bạn',
             keyboardType: TextInputType.emailAddress,
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Please enter your email';
+                return 'Vui lòng nhập email của bạn';
               }
               if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-                return 'Please enter a valid email';
+                return 'Vui lòng nhập địa chỉ email hợp lệ';
               }
               return null;
             },
@@ -267,13 +228,13 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
           const SizedBox(height: 16.0),
           _buildTextField(
             controller: _messageController,
-            label: 'Message',
-            hint: 'Write your message here...',
+            label: 'Tin nhắn',
+            hint: 'Hãy nhập tin nhắn của bạn ở đây ...',
             minLines: 5,
             maxLines: 8,
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Please enter your message';
+                return 'Vui lòng nhập tin nhắn của bạn';
               }
               return null;
             },
@@ -290,7 +251,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
               ),
             ),
             child: Text(
-              'Send Message',
+              'Gửi tin nhắn',
               style: GoogleFonts.interTight(
                 fontWeight: FontWeight.w600,
                 fontSize: 16.0,

@@ -7,6 +7,7 @@ import 'feature/survey/collect_information_screen.dart';
 import 'feature/home/homepage_screen.dart';
 // Import màn hình giới thiệu mới (Xem code mẫu bên dưới nếu chưa có)
 import 'feature/home/introduce_screen.dart'; 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 
 void main() async {
@@ -40,7 +41,7 @@ void main() async {
     // TH4: Xong hết -> Vào Trang Chủ
     initialScreen = const HomePage();
   }
-
+  await dotenv.load(fileName: ".env"); // Load file cấu hình
   runApp(MyApp(initialScreen: initialScreen));
 }
 

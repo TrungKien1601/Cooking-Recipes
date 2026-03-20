@@ -9,7 +9,6 @@ const masterIngredientSchema = new mongoose.Schema({
   },
 
   synonyms: [{ type: String }], // Tên đồng nghĩa [cite: 43]
-
   nutritionPer100g: { // Embedded Object cho dinh dưỡng [cite: 43]
     calories: { type: Number, default: 0 },
     protein: { type: Number, default: 0 },

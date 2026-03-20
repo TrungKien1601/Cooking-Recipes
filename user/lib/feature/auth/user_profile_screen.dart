@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
-const String kBaseUrl = "https://kellie-unsarcastic-hoa.ngrok-free.dev"; 
 
 // --- THEME CONSTANTS ---
 const Color kPrimaryBackground = Color(0xFFE3ECE1);
@@ -25,13 +24,14 @@ class UserProfileScreen extends StatefulWidget {
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _authService = AuthService();
+  // Singleton instance
+  final _authService = AuthService(); 
 
   // Controllers
   late TextEditingController _phoneController;
   late TextEditingController _heightController;
   late TextEditingController _weightController;
-  late TextEditingController _nameController;
+  late TextEditingController _nameController; // Thêm controller cho tên nếu muốn sửa tên
 
   String? _selectedGoal;
   bool _isLoading = true;
@@ -46,13 +46,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     "Cải thiện tiêu hóa", "Tăng cường hệ miễn dịch", "Đẹp da & Chống lão hóa",
     "Tăng cường năng lượng", "Cải thiện giấc ngủ", "Thanh lọc cơ thể (Detox)"
   ];
-  
+
   Map<String, dynamic> _userData = {
     'uid': '', 'email': '', 'username': '', 'image': '',
-    'phone': '', 'gender': '', 'age': '', 
+    'phone': '', 'gender': '', 'age': '',
     'height': '', 'weight': '', 'goal': null,
-    'healthConditions': [], 'diets': [], 'habits': [], 
-    'exclusions': [], 'nutritionTargets': null,
+    'healthConditions': '', 'diets': '', 'habits': '',
+    'exclusions': '', 'nutritionTargets': null,
+    'ai_recommendations': '',
+    'ai_foods_to_avoid': '',
   };
 
   @override
@@ -61,8 +63,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     _phoneController = TextEditingController();
     _heightController = TextEditingController();
     _weightController = TextEditingController();
-    _nameController = TextEditingController(); 
-    
+    _nameController = TextEditingController();
     _fetchUserProfile();
   }
 
@@ -71,46 +72,50 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     _phoneController.dispose();
     _heightController.dispose();
     _weightController.dispose();
-    // _nameController.dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
-  // --- LOGIC: FETCH DATA (ĐÃ SỬA LỖI TREO) ---
+  // --- HELPER: LIST TO STRING ---
+  String _listToString(dynamic list) {
+    if (list is List) {
+      if (list.isEmpty) return '';
+      bool isLongText = list.any((e) => e.toString().length > 25);
+      if (isLongText) return list.map((e) => "• $e").join('\n');
+      return list.join(', ');
+    }
+    return list?.toString() ?? '';
+  }
+
+  // --- LOGIC: FETCH DATA (Đã sửa khớp AuthService mới) ---
   Future<void> _fetchUserProfile() async {
+    // 1. Load Cache trước cho mượt
+    await _loadFromCache();
+
+    // 2. Gọi API (Không cần truyền email nữa)
+    final profileData = await _authService.getUserProfile();
+
+    if (mounted) {
+      if (profileData != null) {
+        _populateDataToUI(profileData);
+        _saveToLocalCache(profileData);
+      } else {
+        // Nếu API lỗi, giữ nguyên data từ cache hoặc báo lỗi
+        print("⚠️ Không lấy được dữ liệu profile từ Server");
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadFromCache() async {
     final prefs = await SharedPreferences.getInstance();
-    String? email = prefs.getString('email');
-    
-    // 1. Load tạm từ Cache để hiển thị trước (cho đỡ trống)
     String? cachedData = prefs.getString('user_data');
     if (cachedData != null) {
       try {
-        final data = jsonDecode(cachedData);
-        email = data['email']; 
-        _populateDataToUI(data); 
+        _populateDataToUI(jsonDecode(cachedData));
       } catch (e) {
         print("Lỗi parse cache: $e");
       }
-    }
-
-    if (email != null) {
-      // 2. Gọi API lấy dữ liệu mới nhất
-      final profileData = await _authService.getUserProfile(email);
-      
-      if (mounted) {
-        if (profileData != null) {
-           // TRƯỜNG HỢP THÀNH CÔNG
-           print("✅ Đã nhận dữ liệu Profile: $profileData"); // Debug log
-           _populateDataToUI(profileData);
-           _saveToLocalCache(profileData); 
-        } else {
-           // ⚠️ TRƯỜNG HỢP THẤT BẠI (Backend trả null) -> PHẢI TẮT LOADING
-           print("⚠️ Không lấy được dữ liệu profile (null)");
-           setState(() => _isLoading = false); 
-        }
-      }
-    } else {
-      // Trường hợp chưa có email trong cache (lần đầu cài app?)
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -119,7 +124,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     String? currentCache = prefs.getString('user_data');
     Map<String, dynamic> mergedData = {};
     if (currentCache != null) mergedData = jsonDecode(currentCache);
-    mergedData.addAll(newData); 
+    mergedData.addAll(newData);
     await prefs.setString('user_data', jsonEncode(mergedData));
   }
 
@@ -134,66 +139,57 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           'phone': data['phone'] ?? '',
           'gender': data['gender'] ?? '',
           'age': data['age']?.toString() ?? '',
-          
-          // Xử lý Height an toàn
-          'height': (data['height'] is Map) 
-              ? (data['height']['value']?.toString() ?? '') 
+
+          'height': (data['height'] is Map)
+              ? (data['height']['value']?.toString() ?? '')
               : (data['height']?.toString() ?? ''),
-              
-          // Xử lý Weight an toàn
-          'weight': (data['weight'] is Map) 
-              ? (data['weight']['value']?.toString() ?? '') 
+
+          'weight': (data['weight'] is Map)
+              ? (data['weight']['value']?.toString() ?? '')
               : (data['weight']?.toString() ?? ''),
-          
-          // Xử lý List an toàn (tránh lỗi cast)
+
           'healthConditions': _listToString(data['healthConditions']),
-          'exclusions': (data['exclusions'] is List) 
-              ? (data['exclusions'] as List).join(', ') 
-              : _listToString(data['allergies']), // Dự phòng nếu field tên là allergies
+          'exclusions': (data['exclusions'] is List)
+              ? (data['exclusions'] as List).join(', ')
+              : _listToString(data['allergies']),
 
           'goal': data['goal'],
           'diets': data['diets'] ?? data['dietPreference'] ?? '',
           'habits': data['habits'] ?? [],
           'nutritionTargets': data['nutritionTargets'],
+          'ai_recommendations': _listToString(data['ai_recommendations']),
+          'ai_foods_to_avoid': _listToString(data['ai_foods_to_avoid']),
         };
 
         _phoneController.text = _userData['phone'];
         _heightController.text = _userData['height'];
         _weightController.text = _userData['weight'];
-        
+        _nameController.text = _userData['username'];
+
         String? serverGoal = _userData['goal'];
         if (serverGoal != null && serverGoal.isNotEmpty) {
-           if (!_goalOptions.contains(serverGoal)) _goalOptions.add(serverGoal);
-           _selectedGoal = serverGoal;
+          if (!_goalOptions.contains(serverGoal)) _goalOptions.add(serverGoal);
+          _selectedGoal = serverGoal;
         }
 
-        // QUAN TRỌNG NHẤT: Tắt loading
         _isLoading = false;
       });
     } catch (e) {
       print("❌ Lỗi Crash khi map dữ liệu lên UI: $e");
-      // Vẫn phải tắt loading để app không bị treo
       setState(() => _isLoading = false);
     }
   }
 
-  String _listToString(dynamic list) {
-    if (list is List) return list.join(', ');
-    return list?.toString() ?? '';
-  }
-
-  // --- LOGIC: IMAGE HANDLING ---
+  // --- LOGIC: IMAGE URL ---
   String _getProfileImageUrl() {
     String? serverImage = _userData['image'];
-    // 1. Kiểm tra null hoặc rỗng
     if (serverImage == null || serverImage.isEmpty || serverImage.contains('default')) return '';
-    // 2. Chặn lỗi 404: Nếu tên ảnh chứa "default" -> Coi như không có ảnh
-    if (serverImage.toLowerCase().contains('default')) return '';
-    // 3. Nếu là link tuyệt đối (http...) -> Trả về luôn
     if (serverImage.startsWith('http')) return serverImage;
-    // 4. Xử lý đường dẫn (Fix lỗi Windows dùng dấu backslash \)
+
+    // Sử dụng baseUrl từ AuthService để đồng bộ
+    String baseUrl = _authService.baseUrl; 
     String path = serverImage.startsWith('/') ? serverImage.substring(1) : serverImage;
-    return "$kBaseUrl/$path?t=${DateTime.now().millisecondsSinceEpoch}";
+    return "$baseUrl/$path?t=${DateTime.now().millisecondsSinceEpoch}";
   }
 
   void _showImagePickerOptions() {
@@ -208,18 +204,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ListTile(
                 leading: const Icon(Icons.photo_library, color: kPrimaryColor),
                 title: const Text('Chọn từ thư viện'),
-                onTap: () {
-                  _pickAndUploadImage(ImageSource.gallery);
-                  Navigator.of(context).pop();
-                },
+                onTap: () { _pickAndUploadImage(ImageSource.gallery); Navigator.of(context).pop(); },
               ),
               ListTile(
                 leading: const Icon(Icons.camera_alt, color: kPrimaryColor),
                 title: const Text('Chụp ảnh mới'),
-                onTap: () {
-                  _pickAndUploadImage(ImageSource.camera);
-                  Navigator.of(context).pop();
-                },
+                onTap: () { _pickAndUploadImage(ImageSource.camera); Navigator.of(context).pop(); },
               ),
             ],
           ),
@@ -234,36 +224,36 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       if (pickedFile == null) return;
 
       File file = File(pickedFile.path);
-      setState(() { _imageFile = file; _isLoading = true; }); 
+      setState(() {
+        _imageFile = file;
+        _isLoading = true;
+      });
 
+      // 1. Upload ảnh trước
       String? serverPath = await _authService.uploadAvatar(file);
 
       if (!mounted) return;
 
       if (serverPath != null) {
-        bool success = await _authService.updateUserProfile(
-          userId: _userData['uid'],
-          image: serverPath,
-          username: _userData['username'], // Không cần gửi tên nếu không đổi
-          phone: _phoneController.text.trim(),
-          gender: _userData['gender'],
-          age: int.tryParse(_userData['age']),
-          height: double.tryParse(_heightController.text),
-          weight: double.tryParse(_weightController.text),
-          goal: _selectedGoal,
-        );
+        // 2. Cập nhật URL ảnh vào profile (Backend có thể đã tự update, nhưng gọi PUT để chắc chắn đồng bộ các trường khác)
+        // SỬA: Truyền Map thay vì named arguments
+        bool success = await _authService.updateUserProfile({
+          'image': serverPath,
+          // Gửi các trường khác để tránh bị ghi đè null nếu backend xử lý không kỹ
+          'username': _userData['username'], 
+        });
 
         if (success) {
           setState(() {
             _userData['image'] = serverPath;
             _isLoading = false;
-            _isDataChanged = true; 
+            _isDataChanged = true;
           });
           _saveToLocalCache({'image': serverPath});
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cập nhật ảnh thành công!'), backgroundColor: kPrimaryColor));
         } else {
           setState(() => _isLoading = false);
-          _showError('Ảnh lên server ok, nhưng lỗi lưu vào database.');
+          _showError('Lỗi cập nhật data sau khi upload ảnh.');
         }
       } else {
         setState(() => _isLoading = false);
@@ -275,10 +265,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
   }
 
-  // --- LOGIC: SAVE PROFILE ---
+  // --- LOGIC: SAVE DATA (Đã sửa khớp AuthService mới) ---
   Future<void> _saveProfileChanges() async {
     if (!_formKey.currentState!.validate()) return;
-    
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _isLoading = true);
 
@@ -287,26 +276,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       double? weightVal = double.tryParse(_weightController.text);
       int? ageVal = int.tryParse(_userData['age'].toString());
 
-      bool success = await _authService.updateUserProfile(
-        userId: _userData['uid'],
-        username: _userData['username'],
-        phone: _phoneController.text.trim(),
-        height: heightVal,
-        weight: weightVal,
-        goal: _selectedGoal,
-        gender: _userData['gender'],
-        age: ageVal,
-        image: _userData['image'],
-        nutritionTargets: _userData['nutritionTargets'],
-      );
+      // SỬA: Gọi AuthService với Map<String, dynamic>
+      // Không cần truyền userId vì Token đã chứa nó
+      bool success = await _authService.updateUserProfile({
+        'username': _userData['username'], // Nếu có cho sửa tên
+        'phone': _phoneController.text.trim(),
+        'height': heightVal,
+        'weight': weightVal,
+        'goal': _selectedGoal,
+        'gender': _userData['gender'],
+        'age': ageVal,
+        'image': _userData['image'],
+        // Các trường AI giữ nguyên
+        'nutritionTargets': _userData['nutritionTargets'],
+      });
 
       if (!mounted) return;
       setState(() => _isLoading = false);
 
       if (success) {
-        setState(() => _isDataChanged = true); 
+        setState(() => _isDataChanged = true);
         await _saveToLocalCache({
-          'username': _nameController.text.trim(), // Không update cache username
           'phone': _phoneController.text.trim(),
           'height': heightVal,
           'weight': weightVal,
@@ -315,9 +305,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         });
 
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã lưu thay đổi!'), backgroundColor: kPrimaryColor));
-        _fetchUserProfile();
       } else {
-        _showError('Lỗi cập nhật hồ sơ (Database).');
+        _showError('Lỗi cập nhật hồ sơ (Server).');
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -329,7 +318,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: kErrorColor));
   }
 
-  // --- UI BUILDING ---
+  // --- UI PART (Giữ nguyên logic UI, chỉ format lại chút) ---
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -363,7 +352,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
         onPressed: () => Navigator.of(context).pop(_isDataChanged),
       ),
-      title: Text('User Profile', style: GoogleFonts.interTight(color: Colors.white, fontWeight: FontWeight.w600)),
+      title: Text('Thông tin cá nhân', style: GoogleFonts.interTight(color: Colors.white, fontWeight: FontWeight.w600)),
     );
   }
 
@@ -376,7 +365,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           alignment: Alignment.centerLeft,
           child: Padding(
             padding: const EdgeInsets.only(bottom: 12.0, left: 4),
-            child: Text('Personal Details', style: GoogleFonts.interTight(fontSize: 18, fontWeight: FontWeight.w600, color: kSecondaryText)),
+            child: Text('Thông tin cá nhân', style: GoogleFonts.interTight(fontSize: 18, fontWeight: FontWeight.w600, color: kSecondaryText)),
           ),
         ),
         Container(
@@ -386,32 +375,32 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             key: _formKey,
             child: Column(
               children: [
-                // ✅ SỬA 1: Đổi icon UID về Icons.perm_identity (hoặc Icons.person)
-                _buildReadOnlyItem(icon: Icons.perm_identity, label: "UID", value: _userData['uid']),
-                _buildDivider(),
-                _buildReadOnlyItem(icon: Icons.person_outline, label: "User Name", value: _userData['username']),
+                // _buildReadOnlyItem(icon: Icons.perm_identity, label: "UID", value: _userData['uid']), // Tắt UID đi cho gọn
+                // _buildDivider(),
+                _buildReadOnlyItem(icon: Icons.person_outline, label: "Tên người dùng", value: _userData['username']),
                 _buildDivider(),
                 _buildReadOnlyItem(icon: Icons.email_outlined, label: "Email", value: _userData['email']),
                 _buildDivider(),
-                _buildTextField(controller: _phoneController, label: "Phone", icon: Icons.phone_outlined, isNumber: true),
+                _buildTextField(controller: _phoneController, label: "Số điện thoại", icon: Icons.phone_outlined, isNumber: true),
                 _buildDivider(),
-                _buildTextField(controller: _heightController, label: "Height (cm)", icon: Icons.height, isNumber: true, validator: (v) => (v == null || v.isEmpty) ? 'Required' : null),
+                _buildTextField(controller: _heightController, label: "Chiều cao (cm)", icon: Icons.height, isNumber: true, validator: (v) => (v == null || v.isEmpty) ? 'Required' : null),
                 _buildDivider(),
-                _buildTextField(controller: _weightController, label: "Weight (kg)", icon: Icons.monitor_weight_outlined, isNumber: true, validator: (v) => (v == null || v.isEmpty) ? 'Required' : null),
+                _buildTextField(controller: _weightController, label: "Cân nặng (kg)", icon: Icons.monitor_weight_outlined, isNumber: true, validator: (v) => (v == null || v.isEmpty) ? 'Required' : null),
                 _buildDivider(),
-                _buildDropdown(label: "Goal", icon: Icons.flag_outlined, value: _selectedGoal, items: _goalOptions, onChanged: (v) => setState(() => _selectedGoal = v)),
+                _buildDropdown(label: "Mục tiêu", icon: Icons.flag_outlined, value: _selectedGoal, items: _goalOptions, onChanged: (v) => setState(() => _selectedGoal = v)),
                 _buildDivider(),
-                _buildReadOnlyItem(icon: Icons.wc, label: "Gender", value: _userData['gender']),
+                _buildReadOnlyItem(icon: Icons.wc, label: "Giới tính", value: _userData['gender']),
                 _buildDivider(),
-                _buildReadOnlyItem(icon: Icons.cake_outlined, label: "Age", value: _userData['age']),
+                _buildReadOnlyItem(icon: Icons.cake_outlined, label: "Tuổi", value: _userData['age']),
                 
                 if (_userData['healthConditions'].isNotEmpty) ...[
-                   _buildDivider(),
-                   _buildReadOnlyItem(icon: Icons.health_and_safety_outlined, label: "Health", value: _userData['healthConditions']),
+                  _buildDivider(), _buildReadOnlyItem(icon: Icons.health_and_safety_outlined, label: "Tình trạng sức khỏe", value: _userData['healthConditions']),
                 ],
                 if (_userData['exclusions'].isNotEmpty) ...[
-                   _buildDivider(),
-                   _buildReadOnlyItem(icon: Icons.no_food_outlined, label: "Allergies", value: _userData['exclusions']),
+                   _buildDivider(), _buildReadOnlyItem(icon: Icons.no_food_outlined, label: "Dị ứng / Kiêng", value: _userData['exclusions']),
+                ],
+                 if (_userData['ai_recommendations'].isNotEmpty) ...[
+                   _buildDivider(), _buildReadOnlyItem(icon: Icons.tips_and_updates_outlined, label: "Lời khuyên từ AI", value: _userData['ai_recommendations']),
                 ],
 
                 const SizedBox(height: 20),
@@ -426,7 +415,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       elevation: 2,
                     ),
-                    child: Text('Save Changes', style: GoogleFonts.interTight(fontSize: 16, fontWeight: FontWeight.w600)),
+                    child: Text('Lưu thay đổi', style: GoogleFonts.interTight(fontSize: 16, fontWeight: FontWeight.w600)),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -441,39 +430,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   // --- SMALL WIDGETS ---
   Widget _buildAvatarSection() {
     final imgUrl = _getProfileImageUrl();
-    // Debug để xem link tạo ra là gì
-    print("Link ảnh đang load: $imgUrl"); 
-
     return Center(
       child: Stack(
         children: [
           Container(
             width: 120, height: 120,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 4),
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: const Offset(0, 5))],
-            ),
+            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 4), boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: const Offset(0, 5))]),
             child: ClipOval(
               child: _imageFile != null
                   ? Image.file(_imageFile!, fit: BoxFit.cover)
                   : (imgUrl.isNotEmpty
-                      ? Image.network(
-                          imgUrl,
-                          fit: BoxFit.cover,
-                          // Nếu load lỗi (404) -> Hiện avatar mặc định
-                          errorBuilder: (context, error, stackTrace) {
-                            print("Lỗi load ảnh: $error");
-                            return _defaultAvatar();
-                          },
-                          // Hiển thị loading khi đang tải ảnh
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Container(
-                                color: Colors.grey[200],
-                                child: const Center(child: CircularProgressIndicator(strokeWidth: 2)));
-                          },
-                        )
+                      ? Image.network(imgUrl, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => _defaultAvatar(), loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(color: Colors.grey[200], child: const Center(child: CircularProgressIndicator(strokeWidth: 2)));
+                        })
                       : _defaultAvatar()),
             ),
           ),
@@ -499,18 +469,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Widget _buildReadOnlyItem({required IconData icon, required String label, required String value}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Icon(icon, color: kPrimaryColor, size: 24),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(label, style: GoogleFonts.inter(fontSize: 12, color: kSecondaryText)),
-              Text(value.isEmpty ? 'N/A' : value, style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500, color: kPrimaryText)),
-            ]),
-          )
-        ],
-      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, color: kPrimaryColor, size: 24),
+        const SizedBox(width: 16),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: GoogleFonts.inter(fontSize: 12, color: kSecondaryText)),
+          const SizedBox(height: 4),
+          Text(value.isEmpty ? 'N/A' : value, style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500, color: kPrimaryText, height: 1.4)),
+        ]))
+      ]),
     );
   }
 
@@ -522,13 +489,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         keyboardType: isNumber ? TextInputType.number : TextInputType.text,
         validator: validator,
         style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500, color: kPrimaryText),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: GoogleFonts.inter(color: kSecondaryText),
-          prefixIcon: Icon(icon, color: kPrimaryColor),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 12),
-        ),
+        decoration: InputDecoration(labelText: label, labelStyle: GoogleFonts.inter(color: kSecondaryText), prefixIcon: Icon(icon, color: kPrimaryColor), border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(vertical: 12)),
       ),
     );
   }
@@ -538,7 +499,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: DropdownButtonFormField<String>(
-        value: validVal,
+        initialValue: validVal,
         items: items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: GoogleFonts.inter(fontWeight: FontWeight.w500)))).toList(),
         onChanged: onChanged,
         decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon, color: kPrimaryColor), border: InputBorder.none),

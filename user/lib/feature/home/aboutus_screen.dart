@@ -141,7 +141,7 @@ class AboutUsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24.0),
           Text(
-            'Founded in 2020, we started with a simple idea: to make digital solutions accessible and impactful. Our journey has been one of passion, persistence, and partnership.',
+            'Founded in 2025, we started with a simple idea: to make digital solutions accessible and impactful. Our journey has been one of passion, persistence, and partnership.',
             style: GoogleFonts.inter(
               color: kColorPrimaryText,
               fontSize: 16.0, // bodyLarge

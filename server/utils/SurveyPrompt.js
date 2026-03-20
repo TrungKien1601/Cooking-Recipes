@@ -59,7 +59,7 @@ const generateMealPlanPrompt = ({
             "carbs": 150,  // Number only (grams)
             "protein": 100, // Number only (grams)
             "fat": 50,      // Number only (grams)
-            "water": "2 - 2.5 lít" // String is ok here
+            "water": "2 - 6 lít" // String is ok here
         },
         "recommendations": ["Lời khuyên dinh dưỡng 1 ngắn gọn", "Lời khuyên 2"],
         "foodsToAvoid": ["Tên thực phẩm kỵ 1", "Tên thực phẩm kỵ 2"],
@@ -67,6 +67,7 @@ const generateMealPlanPrompt = ({
             {
                 "session": "Bữa Sáng",
                 "name": "Tên món ăn (Tiếng Việt)",
+                "difficulty": "Dễ","Trung bình","Khó",
                 "calories": 500, // Number only
                 "time": "30 phút",
                 "description": "Mô tả ngắn gọn hương vị",
@@ -77,6 +78,7 @@ const generateMealPlanPrompt = ({
             { 
                 "session": "Bữa Trưa", 
                 "name": "...", 
+                "difficulty": "...",
                 "calories": 700, 
                 "time": "...", 
                 "description": "...", 
@@ -87,6 +89,7 @@ const generateMealPlanPrompt = ({
             { 
                 "session": "Bữa Phụ (Chiều)", // Thêm bữa phụ để chia nhỏ calories
                 "name": "...", 
+                "difficulty": "...",
                 "calories": 200, 
                 "time": "5 phút", 
                 "description": "...", 
@@ -97,6 +100,7 @@ const generateMealPlanPrompt = ({
             { 
                 "session": "Bữa Tối", 
                 "name": "...", 
+                "difficulty": "...",
                 "calories": 400, 
                 "time": "...", 
                 "description": "...", 

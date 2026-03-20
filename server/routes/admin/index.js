@@ -8,6 +8,10 @@ const activityLogRoute = require('./activitylog.route');
 const tagRoute = require('./tag.route');
 const userProfileRoute = require('./userprofile.route');
 const ingredientRoute = require('./ingredient.route');
+const recipeRoute = require('./recipe.route');
+const pantryRoute = require('./pantry.route');
+const dashboardRoute = require('./dashboard.route');
+const notificationRoute = require('./notification.route')
 
 // Định nghĩa các đường dẫn con
 // Lưu ý: Các file route con không cần sửa gì cả
@@ -20,5 +24,9 @@ router.use('/activity-log', activityLogRoute);
 router.use('/tag', tagRoute);
 router.use('/user-profile', userProfileRoute);
 router.use('/ingredient', ingredientRoute);
+router.use('/recipe', recipeRoute);
+router.use('/pantry', pantryRoute);
+router.use('/dashboard', dashboardRoute);
+router.use('/notification', notificationRoute);
 
 module.exports = router;

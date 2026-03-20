@@ -1,16 +1,13 @@
-import '../home/homepage_screen.dart';
-import 'my_recipes_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-
+import '../services/recipe_service.dart'; // Import Service
 // Import các màn hình khác
+import '../home/homepage_screen.dart';
 import 'add_recipe_screen.dart';
-import '../home/settings_screen.dart';
+import 'my_recipes_screen.dart';
 import '../scan/pantry_screen.dart';
-import 'blog_screen.dart'; // Import để chuyển sang màn hình chi tiết
-
-// 👇 Import Service
-import '../services/recipe_service.dart';
+import '../home/settings_screen.dart';
+import '../recipe/blog_screen.dart';
 
 // --- Định nghĩa màu sắc ---
 const Color kColorBackground = Color(0xFFF1F4F8);
@@ -33,66 +30,64 @@ class MarkdownRecipeScreen extends StatefulWidget {
 
 class _MarkdownRecipeScreenState extends State<MarkdownRecipeScreen> {
   late TextEditingController _searchController;
-  late FocusNode _searchFocusNode;
+  final int _selectedIndex = 1;
 
-  final int _selectedIndex = 0; // Để highlight đúng tab nếu cần
-
-  // ✅ Thay đổi: Dùng List dynamic để chứa dữ liệu thật từ API
-  List<dynamic> _favoriteRecipes = [];
+  // State dữ liệu
+  List<dynamic> _savedRecipes = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController();
-    _searchFocusNode = FocusNode();
-    
-    // ✅ Gọi API lấy dữ liệu thật
-    _fetchFavoriteRecipes();
+    _loadSavedRecipes();
   }
 
-  // ✅ Hàm lấy dữ liệu từ API
-  Future<void> _fetchFavoriteRecipes() async {
+  // ✅ Hàm tải dữ liệu: getSavedRecipes
+  Future<void> _loadSavedRecipes() async {
     setState(() => _isLoading = true);
     try {
-      // Gọi Service lấy danh sách yêu thích
-      // Lưu ý: Bạn cần đảm bảo RecipeService có hàm getFavoriteRecipes
-      // Nếu chưa có, tạm thời mình dùng getAllRecipes để test hiển thị
-      final result = await RecipeService.getFavoriteRecipes(); 
-      
-      if (result['success'] == true) {
+      final res = await RecipeService.getSavedRecipes();
+
+      if (mounted) {
         setState(() {
-          _favoriteRecipes = result['data'] ?? [];
+          if (res['success'] == true && res['data'] != null) {
+            _savedRecipes = res['data'];
+          } else {
+            _savedRecipes = [];
+          }
+          _isLoading = false;
         });
       }
     } catch (e) {
-      print("Lỗi tải danh sách yêu thích: $e");
-    } finally {
+      print("Lỗi tải danh sách đã lưu: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _removeFavorite(String id) async {
+  // ✅ Hàm xóa khỏi danh sách: toggleSave
+  Future<void> _removeSavedRecipe(String id) async {
     try {
-      bool success = await RecipeService.toggleFavorite(id);
-      // Nếu toggle trả về false (đã bỏ like) -> Xóa khỏi list hiện tại
-      if (!success) {
+      final result = await RecipeService.toggleSave(id);
+
+      // Nếu server trả về isSaved: false, tức là đã bỏ lưu thành công
+      if (result['success'] == true && result['isSaved'] == false) {
         setState(() {
-          _favoriteRecipes.removeWhere((recipe) => recipe['_id'] == id);
+          _savedRecipes
+              .removeWhere((recipe) => (recipe['_id'] ?? recipe['id']) == id);
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Đã xóa khỏi danh sách yêu thích")),
+          const SnackBar(content: Text("Đã xóa khỏi danh sách đã lưu")),
         );
       }
     } catch (e) {
-      print("Lỗi xóa: $e");
+      print("Lỗi xóa saved recipe: $e");
     }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
-    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -104,16 +99,20 @@ class _MarkdownRecipeScreenState extends State<MarkdownRecipeScreen> {
         backgroundColor: kColorBackground,
         appBar: _buildAppBar(),
         body: SafeArea(
-          top: true,
-          child: _isLoading 
-              ? const Center(child: CircularProgressIndicator(color: kColorPrimary))
-              : SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    children: [
-                      _buildSearchBar(),
-                      _buildRecipeList(),
-                    ],
+          child: _isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(color: kColorPrimary))
+              : RefreshIndicator(
+                  onRefresh: _loadSavedRecipes,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: Column(
+                      children: [
+                        _buildSearchBar(),
+                        _buildRecipeList(),
+                        const SizedBox(height: 80),
+                      ],
+                    ),
                   ),
                 ),
         ),
@@ -125,10 +124,13 @@ class _MarkdownRecipeScreenState extends State<MarkdownRecipeScreen> {
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       backgroundColor: kColorBackground,
-      automaticallyImplyLeading: false,
       elevation: 0.0,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_ios_new, color: kColorPrimaryText),
+        onPressed: () => Navigator.pop(context),
+      ),
       title: Text(
-        'Công thức yêu thích',
+        'Bộ Sưu Tập',
         style: GoogleFonts.interTight(
           color: kColorPrimaryText,
           fontWeight: FontWeight.w600,
@@ -138,8 +140,8 @@ class _MarkdownRecipeScreenState extends State<MarkdownRecipeScreen> {
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh, color: kColorPrimaryText),
-          onPressed: _fetchFavoriteRecipes, // Nút làm mới
-        ),
+          onPressed: _loadSavedRecipes,
+        )
       ],
     );
   }
@@ -149,51 +151,53 @@ class _MarkdownRecipeScreenState extends State<MarkdownRecipeScreen> {
       padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 0.0),
       child: TextFormField(
         controller: _searchController,
-        focusNode: _searchFocusNode,
         decoration: InputDecoration(
-          hintText: 'Tìm kiếm món ăn...',
-          hintStyle: GoogleFonts.inter(color: kColorSecondaryText, fontSize: 14.0),
+          hintText: 'Tìm công thức đã lưu...',
+          hintStyle:
+              GoogleFonts.inter(color: kColorSecondaryText, fontSize: 14.0),
           filled: true,
           fillColor: kColorCard,
-          prefixIcon: const Icon(Icons.search_rounded, color: kColorSecondaryText, size: 20.0),
+          prefixIcon:
+              const Icon(Icons.search_rounded, color: kColorSecondaryText),
           border: OutlineInputBorder(
-            borderSide: BorderSide.none,
-            borderRadius: BorderRadius.circular(25.0),
-          ),
+              borderRadius: BorderRadius.circular(25.0),
+              borderSide: BorderSide.none),
         ),
+        onChanged: (value) => setState(() {}), // Re-build để filter local
       ),
     );
   }
 
   Widget _buildRecipeList() {
-    if (_favoriteRecipes.isEmpty) {
+    if (_savedRecipes.isEmpty) {
       return Container(
-        padding: const EdgeInsets.all(32.0),
-        alignment: Alignment.center,
         height: 400,
+        alignment: Alignment.center,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.favorite_border, size: 80.0, color: kColorSecondaryText.withOpacity(0.5)),
+            Icon(Icons.bookmark_border,
+                size: 80.0, color: kColorSecondaryText.withOpacity(0.5)),
             const SizedBox(height: 16.0),
-            Text(
-              'Chưa có mục yêu thích',
-              style: GoogleFonts.interTight(
-                color: kColorPrimaryText,
-                fontSize: 22.0,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            Text('Chưa lưu món nào',
+                style: GoogleFonts.interTight(
+                    color: kColorPrimaryText,
+                    fontSize: 20.0,
+                    fontWeight: FontWeight.w600)),
             const SizedBox(height: 8.0),
-            Text(
-              'Hãy thả tim các món ăn bạn thích để xem lại ở đây.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(color: kColorSecondaryText, fontSize: 14.0),
-            ),
+            Text('Hãy lưu lại các công thức bạn thích nhé!',
+                style: GoogleFonts.inter(color: kColorSecondaryText)),
           ],
         ),
       );
     }
+
+    // Filter Local
+    final filterText = _searchController.text.toLowerCase();
+    final displayList = _savedRecipes.where((recipe) {
+      final name = (recipe['name'] ?? '').toString().toLowerCase();
+      return name.contains(filterText);
+    }).toList();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 0.0),
@@ -201,39 +205,61 @@ class _MarkdownRecipeScreenState extends State<MarkdownRecipeScreen> {
         padding: EdgeInsets.zero,
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: _favoriteRecipes.length,
+        itemCount: displayList.length,
         itemBuilder: (context, index) {
-          final recipe = _favoriteRecipes[index];
-          
-          // ✅ XỬ LÝ ẢNH: Ghép domain nếu là ảnh upload
-          String imageUrl = recipe['image'] ?? '';
-          if (imageUrl.isNotEmpty && !imageUrl.startsWith('http')) {
-             imageUrl = '${RecipeService.domain}$imageUrl';
+          final recipe = displayList[index];
+
+          // Lấy ID chuẩn để BlogScreen dùng gọi API chi tiết
+          final String id = recipe['_id'] ?? recipe['id'] ?? '';
+          final String name = recipe['name'] ?? 'Món ăn';
+
+          // --- XỬ LÝ ẢNH FULL URL ---
+          String image = recipe['image'] ?? '';
+          if (image.isNotEmpty && !image.startsWith('http')) {
+            if (!image.startsWith('/')) {
+              image = '${RecipeService.domain}/$image';
+            } else {
+              image = '${RecipeService.domain}$image';
+            }
           }
 
-          // Xử lý thông tin hiển thị
-          String title = recipe['name'] ?? 'Món chưa đặt tên';
-          String difficulty = recipe['difficulty'] ?? 'Dễ';
-          String time = "${recipe['cookTimeMinutes'] ?? 30} phút";
-          String details = "$difficulty • $time";
-          String rating = "5.0"; // Tạm thời hardcode rating nếu chưa có
+          final String difficulty = recipe['difficulty'] ?? 'Dễ';
+          final int time = recipe['cookTimeMinutes'] ?? recipe['time'] ?? 30;
+          final String details = "$difficulty • $time phút";
 
           return Padding(
             padding: const EdgeInsets.only(bottom: 16.0),
-            child: GestureDetector(
+            child: InkWell(
               onTap: () {
-                 // Chuyển sang trang chi tiết
-                 Navigator.push(
-                    context, 
-                    MaterialPageRoute(builder: (context) => BlogScreen(recipeData: recipe))
-                 );
+                // 🔥 LOGIC QUAN TRỌNG NHẤT Ở ĐÂY
+                final dataToSend = {
+                  // 1. Copy toàn bộ dữ liệu hiện có (dù thiếu)
+                  ...recipe,
+
+                  // 2. Ghi đè các trường quan trọng đã xử lý
+                  '_id': id, // Đảm bảo ID chính xác
+                  'image': image, // URL ảnh đã nối domain
+                  'isSaved': true, // Đánh dấu đã lưu
+
+                  // 3. Fallback giá trị rỗng để UI không bị crash trước khi load xong
+                  'description': recipe['description'] ?? "",
+                  'ingredients': recipe['ingredients'] ?? [],
+                  'steps': recipe['steps'] ?? recipe['instructions'] ?? [],
+                };
+
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        // BlogScreen mới sẽ tự động dùng '_id' để tải full data
+                        builder: (context) => BlogScreen(
+                            recipeData: dataToSend, isOwner: false))).then(
+                    (_) => _loadSavedRecipes()); // Reload khi quay lại
               },
-              child: _buildFavoriteRecipeCard(
-                id: recipe['_id'], // ID Mongo thường là _id
-                imageUrl: imageUrl,
-                title: title,
+              child: _buildSavedRecipeCard(
+                id: id,
+                imageUrl: image,
+                title: name,
                 details: details,
-                // rating: rating
               ),
             ),
           );
@@ -242,19 +268,19 @@ class _MarkdownRecipeScreenState extends State<MarkdownRecipeScreen> {
     );
   }
 
-  Widget _buildFavoriteRecipeCard({
+  Widget _buildSavedRecipeCard({
     required String id,
     required String imageUrl,
     required String title,
     required String details,
-    // required String rating,
   }) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
         color: kColorCard,
         boxShadow: const [
-          BoxShadow(blurRadius: 4.0, color: kColorShadow, offset: Offset(0.0, 2.0))
+          BoxShadow(
+              blurRadius: 4.0, color: kColorShadow, offset: Offset(0.0, 2.0))
         ],
         borderRadius: BorderRadius.circular(12.0),
       ),
@@ -276,64 +302,55 @@ class _MarkdownRecipeScreenState extends State<MarkdownRecipeScreen> {
                       width: double.infinity,
                       height: 180.0,
                       color: kColorBorder,
-                      child: const Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.broken_image, color: kColorSecondaryText),
-                          SizedBox(height: 8),
-                          Text("Không tải được ảnh", style: TextStyle(color: kColorSecondaryText))
-                        ],
-                      ),
+                      child: const Icon(Icons.broken_image,
+                          color: kColorSecondaryText),
                     ),
                   ),
                 ),
+                // Nút Xóa (Thùng rác)
                 Align(
                   alignment: const Alignment(0.9, -0.8),
                   child: Container(
                     margin: const EdgeInsets.only(top: 8, right: 8),
-                    width: 40.0,
-                    height: 40.0,
                     decoration: const BoxDecoration(
-                      color: kColorOverlay,
-                      shape: BoxShape.circle,
-                    ),
+                        color: kColorOverlay, shape: BoxShape.circle),
                     child: IconButton(
-                      icon: const Icon(Icons.delete_outline, color: kColorError, size: 20.0),
-                      onPressed: () => _removeFavorite(id),
+                      icon: const Icon(Icons.delete_outline,
+                          color: kColorError, size: 20.0),
+                      onPressed: () => _removeSavedRecipe(id),
                     ),
                   ),
                 ),
               ],
             ),
             Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.only(top: 12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.interTight(
-                      color: kColorPrimaryText,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 18.0,
-                    ),
-                  ),
+                  Text(title,
+                      style: GoogleFonts.interTight(
+                          color: kColorPrimaryText,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 18.0)),
                   const SizedBox(height: 4.0),
-                  Text(
-                    details,
-                    style: GoogleFonts.inter(
-                      color: kColorSecondaryText,
-                      fontSize: 12.0,
-                    ),
-                  ),
+                  Text(details,
+                      style: GoogleFonts.inter(
+                          color: kColorSecondaryText, fontSize: 12.0)),
                   const SizedBox(height: 8.0),
-                  // Row(
-                  //   children: [
-                  //     const Icon(Icons.star_rounded, color: kColorRatingStar, size: 16.0),
-                  //     const SizedBox(width: 4.0),
-                  //     Text(rating, style: GoogleFonts.inter(fontSize: 12.0, fontWeight: FontWeight.w500)),
-                  //   ],
-                  // ),
+                  Row(
+                    children: [
+                      // Icon Bookmark màu xanh
+                      const Icon(Icons.bookmark,
+                          color: kColorPrimary, size: 16.0),
+                      const SizedBox(width: 4.0),
+                      Text("Đã lưu",
+                          style: GoogleFonts.inter(
+                              color: kColorPrimary,
+                              fontSize: 12.0,
+                              fontWeight: FontWeight.bold)),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -343,14 +360,16 @@ class _MarkdownRecipeScreenState extends State<MarkdownRecipeScreen> {
     );
   }
 
+  // Thanh điều hướng dưới cùng
   Widget _buildBottomNav() {
     return BottomNavigationBar(
-      currentIndex: 1, // Đang ở tab "My Recipe" hoặc "Favorite"
+      currentIndex: _selectedIndex,
       type: BottomNavigationBarType.fixed,
       backgroundColor: kColorCard,
       selectedItemColor: kColorPrimary,
       unselectedItemColor: kColorSecondaryText,
       onTap: (int index) {
+        if (index == _selectedIndex) return;
         switch (index) {
           case 0:
             Navigator.of(context).pushAndRemoveUntil(
@@ -358,26 +377,35 @@ class _MarkdownRecipeScreenState extends State<MarkdownRecipeScreen> {
                 (route) => false);
             break;
           case 1:
-            // Đang ở đây rồi, không làm gì
+            // Đã ở trang này (hoặc chuyển về MyRecipe nếu trang này là tab phụ)
+            Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const MyRecipeScreen()));
             break;
           case 2:
-            Navigator.push(context,
-                MaterialPageRoute(builder: (context) => const AddRecipeScreen()));
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const AddRecipeScreen()));
             break;
           case 3:
-            Navigator.push(context,
+            Navigator.pushReplacement(context,
                 MaterialPageRoute(builder: (context) => const PantryScreen()));
             break;
           case 4:
-            Navigator.push(context,
-                MaterialPageRoute(builder: (context) => const SettingsScreen()));
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const SettingsScreen()));
             break;
         }
       },
       items: const <BottomNavigationBarItem>[
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.book), label: 'My Recipe'), // Đổi icon thành Favorite
-        BottomNavigationBarItem(icon: Icon(Icons.add_circle_outline), label: 'Plus'),
+        BottomNavigationBarItem(icon: Icon(Icons.book), label: 'My Recipe'),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.add_circle_outline), label: 'Plus'),
         BottomNavigationBarItem(icon: Icon(Icons.kitchen), label: 'Pantry'),
         BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Setting'),
       ],

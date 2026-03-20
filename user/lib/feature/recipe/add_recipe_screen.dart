@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -29,6 +28,19 @@ const List<String> kTimeOptions = [
   'Trên 1 giờ'
 ];
 
+// --- DANH SÁCH ĐƠN VỊ CHUẨN ---
+const List<String> kUnitOptions = [
+  'g',
+  'ml',
+  'kg',
+  'l',
+  'tbsp',
+  'tsp',
+  'cup',
+  'quả',
+  'củ'
+];
+
 final List<String> kServingsOptions =
     List.generate(12, (index) => '${index + 1} người');
 
@@ -40,19 +52,25 @@ class AddRecipeScreen extends StatefulWidget {
   State<AddRecipeScreen> createState() => _AddRecipeScreenState();
 }
 
+// --- CONTROLLER CHO NGUYÊN LIỆU ---
 class IngredientController {
   final TextEditingController name;
   final TextEditingController quantity;
+  final TextEditingController weight;
   final TextEditingController unit;
+  bool isVerified;
 
   IngredientController()
       : name = TextEditingController(),
         quantity = TextEditingController(),
-        unit = TextEditingController();
+        weight = TextEditingController(),
+        unit = TextEditingController(),
+        isVerified = false;
 
   void dispose() {
     name.dispose();
     quantity.dispose();
+    weight.dispose();
     unit.dispose();
   }
 }
@@ -73,19 +91,21 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
   List<dynamic> _apiDietTags = [];
   List<dynamic> _apiRegionTags = [];
   List<dynamic> _apiDishTypeTags = [];
+  List<dynamic> _apiDifficultyTags = [];
+
   bool _isTagsLoading = true;
 
   final List<String> _selectedTags = [];
 
   String? _selectedTime;
   String? _selectedServings = "2 người";
+  String? _selectedDifficulty = "Trung bình";
+
   final List<IngredientController> _ingredientRows = [];
 
   Map<String, dynamic>? _nutritionData;
   bool _isLoading = false;
-  
-  // ✅ BIẾN MỚI: Kiểm tra đã phân tích chưa
-  bool _isNutritionAnalyzed = false; 
+  bool _isNutritionAnalyzed = false;
 
   @override
   void initState() {
@@ -113,6 +133,8 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
           _apiDietTags = result['data']['dietTags'] ?? [];
           _apiRegionTags = result['data']['regionTags'] ?? [];
           _apiDishTypeTags = result['data']['dishtypeTags'] ?? [];
+          _apiDifficultyTags = result['data']['difficultyTags'] ?? [];
+
           _isTagsLoading = false;
         });
       } else {
@@ -147,7 +169,7 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
     if (video != null) {
       setState(() {
         _selectedVideo = File(video.path);
-        _videoUrlController.clear(); 
+        _videoUrlController.clear();
       });
     }
   }
@@ -161,10 +183,11 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
       final controller = IngredientController();
       controller.name.addListener(_resetNutritionStatus);
       controller.quantity.addListener(_resetNutritionStatus);
+      controller.weight.addListener(_resetNutritionStatus);
       controller.unit.addListener(_resetNutritionStatus);
-      
+
       _ingredientRows.add(controller);
-      _isNutritionAnalyzed = false; // Thêm dòng mới -> Phải phân tích lại
+      _isNutritionAnalyzed = false;
     });
   }
 
@@ -172,28 +195,39 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
     setState(() {
       _ingredientRows[index].dispose();
       _ingredientRows.removeAt(index);
-      _isNutritionAnalyzed = false; // Xóa dòng -> Phải phân tích lại
+      _isNutritionAnalyzed = false;
     });
   }
 
-  // ✅ Hàm reset trạng thái khi sửa text
   void _resetNutritionStatus() {
     if (_isNutritionAnalyzed) {
       setState(() {
         _isNutritionAnalyzed = false;
-        _nutritionData = null; // Xóa dữ liệu cũ để tránh nhầm lẫn
+        _nutritionData = null;
       });
     }
   }
 
   Future<void> _analyzeNutrition() async {
+    // --- BƯỚC CHẶN 1: KIỂM TRA TỪNG DÒNG NGUYÊN LIỆU ---
+    for (var row in _ingredientRows) {
+      if (row.name.text.isNotEmpty && !row.isVerified) {
+        _showSnackBar("Vui lòng chọn nguyên liệu hợp lệ từ danh sách gợi ý!", isError: true);
+        return;
+      }
+    }
+
     List<Map<String, dynamic>> ingredientsToSend = [];
     for (var row in _ingredientRows) {
       if (row.name.text.isNotEmpty) {
+        double w = double.tryParse(row.weight.text.replaceAll(',', '.')) ?? 0;
+        double q = double.tryParse(row.quantity.text.replaceAll(',', '.')) ?? 0;
+
         ingredientsToSend.add({
           "name": row.name.text,
-          "quantity": double.tryParse(row.quantity.text) ?? 1,
-          "unit": row.unit.text.isEmpty ? "gram" : row.unit.text,
+          "quantity": q,
+          "weight": w,
+          "unit": row.unit.text.isEmpty ? "g" : row.unit.text,
         });
       }
     }
@@ -209,7 +243,7 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
       if (result['success'] == true) {
         setState(() {
           _nutritionData = result['data'];
-          _isNutritionAnalyzed = true; // ✅ Đánh dấu đã phân tích thành công
+          _isNutritionAnalyzed = true;
         });
         _showSnackBar("Đã phân tích xong!", isError: false);
       } else {
@@ -232,50 +266,53 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
   }
 
   Future<void> _submitRecipe() async {
-    // 1. Kiểm tra Form nhập liệu
     if (!_formKey.currentState!.validate()) {
       _showSnackBar("Vui lòng kiểm tra lại các ô nhập liệu", isError: true);
       return;
     }
 
-    // 2. Kiểm tra Ảnh (Bắt buộc)
+    // --- BƯỚC CHẶN 2: KIỂM TRA LÚC ĐĂNG BÀI ---
+    for (var row in _ingredientRows) {
+      if (row.name.text.isNotEmpty && !row.isVerified) {
+        _showSnackBar("Vui lòng chọn nguyên liệu hợp lệ từ danh sách gợi ý!", isError: true);
+        return;
+      }
+    }
+
     if (_selectedImage == null) {
       _showSnackBar("Vui lòng chọn ảnh món ăn", isError: true);
       return;
     }
-
-    // ✅ 3. KIỂM TRA ĐÃ PHÂN TÍCH AI CHƯA (BẮT BUỘC)
     if (!_isNutritionAnalyzed || _nutritionData == null) {
-      _showSnackBar("Vui lòng nhấn 'Phân tích Dinh dưỡng' trước khi đăng!", isError: true);
-      // Cuộn xuống phần nút phân tích để user thấy (Optional)
+      _showSnackBar("Vui lòng nhấn 'Phân tích Dinh dưỡng' trước khi đăng!",
+          isError: true);
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      // 4. Xử lý Video
       String? finalVideoPath;
       if (_selectedVideo != null) {
         _showSnackBar("Đang tải công thức lên...", isError: false);
         finalVideoPath = await RecipeService.uploadVideo(_selectedVideo!);
-        if (finalVideoPath == null) {
-          throw "Lỗi tải video lên server";
-        }
+        if (finalVideoPath == null) throw "Lỗi tải video lên server";
       } else if (_videoUrlController.text.isNotEmpty) {
         finalVideoPath = _videoUrlController.text;
       }
 
-      // 5. Xử lý Tags
       List<String> mealTimeTagsToSend = [];
       List<String> dietTagsToSend = [];
       List<String> regionTagsToSend = [];
       List<String> dishtypeTagsToSend = [];
 
-      final mealTimeNames = _apiMealTimeTags.map((e) => e['name'].toString()).toSet();
+      final mealTimeNames =
+          _apiMealTimeTags.map((e) => e['name'].toString()).toSet();
       final dietNames = _apiDietTags.map((e) => e['name'].toString()).toSet();
-      final regionNames = _apiRegionTags.map((e) => e['name'].toString()).toSet();
-      final dishtypeNames = _apiDishTypeTags.map((e) => e['name'].toString()).toSet();
+      final regionNames =
+          _apiRegionTags.map((e) => e['name'].toString()).toSet();
+      final dishtypeNames =
+          _apiDishTypeTags.map((e) => e['name'].toString()).toSet();
 
       for (var tag in _selectedTags) {
         if (mealTimeNames.contains(tag)) {
@@ -293,12 +330,14 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
         }
       }
 
-      // 6. Đóng gói dữ liệu
-      List<Map<String, dynamic>> ingredients = _ingredientRows.map((row) => {
-            "name": row.name.text,
-            "quantity": double.tryParse(row.quantity.text) ?? 0,
-            "unit": row.unit.text.isEmpty ? "gram" : row.unit.text,
-          }).toList();
+      List<Map<String, dynamic>> ingredients = _ingredientRows
+          .map((row) => {
+                "name": row.name.text,
+                "quantity": double.tryParse(row.quantity.text) ?? 0,
+                "weight": double.tryParse(row.weight.text) ?? 0,
+                "unit": row.unit.text.isEmpty ? "g" : row.unit.text,
+              })
+          .toList();
 
       List<Map<String, String>> steps = _stepsController.text
           .split('\n')
@@ -307,32 +346,34 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
           .toList();
 
       int cookTime = 30;
-      if (_selectedTime == 'Dưới 15 phút') cookTime = 15;
-      else if (_selectedTime == '30-60 phút') cookTime = 60;
+      if (_selectedTime == 'Dưới 15 phút')
+        cookTime = 15;
+      else if (_selectedTime == '30-60 phút')
+        cookTime = 60;
       else if (_selectedTime == 'Trên 1 giờ') cookTime = 90;
 
       int servings = int.tryParse(_selectedServings!.split(' ')[0]) ?? 2;
 
       final recipeData = {
         "name": _nameController.text,
-        "description": _shortDescController.text.isNotEmpty 
-            ? _shortDescController.text 
+        "description": _shortDescController.text.isNotEmpty
+            ? _shortDescController.text
             : "Món ngon mỗi ngày",
         "servings": servings,
         "cookTimeMinutes": cookTime,
-        "difficulty": "Trung bình",
-        "video": finalVideoPath, 
+        "difficulty": _selectedDifficulty ?? "Trung bình",
+        "video": finalVideoPath,
         "ingredients": ingredients,
         "steps": steps,
-        "nutritionAnalysis": _nutritionData, // Dữ liệu từ AI
+        "nutritionAnalysis": _nutritionData,
         "mealTimeTags": mealTimeTagsToSend,
         "dietTags": dietTagsToSend,
         "regionTags": regionTagsToSend,
         "dishtypeTags": dishtypeTagsToSend
       };
 
-      // 7. Gửi lên Server
-      final result = await RecipeService.createRecipe(recipeData, _selectedImage!);
+      final result =
+          await RecipeService.createRecipe(recipeData, _selectedImage!);
 
       if (result['success'] == true) {
         _showSnackBar("Tạo công thức thành công!");
@@ -357,6 +398,10 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final List<String> difficultyOptions = _apiDifficultyTags.isNotEmpty
+        ? _apiDifficultyTags.map((e) => e['name'].toString()).toList()
+        : ['Dễ', 'Trung bình', 'Khó'];
+
     return GestureDetector(
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       child: Scaffold(
@@ -366,7 +411,8 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
           elevation: 0.5,
           centerTitle: true,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_rounded, color: kColorPrimaryText),
+            icon:
+                const Icon(Icons.arrow_back_rounded, color: kColorPrimaryText),
             onPressed: () => Navigator.of(context).pop(),
           ),
           title: Text('Tạo Công Thức',
@@ -419,6 +465,13 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    _buildDropdownField(
+                      label: 'Độ khó',
+                      value: _selectedDifficulty,
+                      items: difficultyOptions,
+                      onChanged: (v) => setState(() => _selectedDifficulty = v),
+                    ),
                     const SizedBox(height: 20),
                     _buildSectionTitle('Phân loại (Tags)'),
                     _buildDynamicCategorySection(),
@@ -437,17 +490,16 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
                     _buildTextField(
                       controller: _stepsController,
                       label: 'Cách làm (Các bước)',
-                      hint: 'Mỗi bước 1 dòng.\nVD:\nB1: Rửa rau\nB2: Luộc thịt...',
+                      hint:
+                          'Mỗi bước 1 dòng.\nVD:\nB1: Rửa rau\nB2: Luộc thịt...',
                       minLines: 4,
                       maxLines: null,
                       keyboardType: TextInputType.multiline,
                       textInputAction: TextInputAction.newline,
                     ),
                     const SizedBox(height: 20),
-
                     _buildSectionTitle('Video hướng dẫn'),
                     _buildVideoSelectionSection(),
-                    
                     const SizedBox(height: 20),
                     _buildNutritionSection(),
                     const SizedBox(height: 30),
@@ -459,7 +511,7 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
             ),
             if (_isLoading)
               Container(
-                color: Colors.white.withOpacity(0.5), 
+                color: Colors.white.withOpacity(0.5),
                 child: const Center(
                     child: CircularProgressIndicator(color: kColorPrimary)),
               )
@@ -469,17 +521,14 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
     );
   }
 
-  // --- WIDGETS ---
-
   Widget _buildVideoSelectionSection() {
     return Column(
       children: [
-        _buildVideoPicker(), // Nút chọn file
+        _buildVideoPicker(),
         const SizedBox(height: 12),
         Center(
             child: Text("- HOẶC -",
-                style:
-                    TextStyle(color: kColorSecondaryText, fontSize: 12))),
+                style: TextStyle(color: kColorSecondaryText, fontSize: 12))),
         const SizedBox(height: 12),
         TextFormField(
           controller: _videoUrlController,
@@ -527,8 +576,7 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
                   const Icon(Icons.add_photo_alternate_outlined,
                       color: kColorSecondaryText, size: 48),
                   Text('Chạm để chọn ảnh bìa',
-                      style:
-                          GoogleFonts.inter(color: kColorSecondaryText)),
+                      style: GoogleFonts.inter(color: kColorSecondaryText)),
                 ],
               )
             : null,
@@ -794,6 +842,16 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
             flex: 5,
             child: TypeAheadField<Map<String, dynamic>>(
               controller: rowController.name,
+              hideOnEmpty: false, // Hiện dropdown kể cả khi mảng rỗng
+              emptyBuilder: (context) {
+                return Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Text(
+                    'Không tìm thấy nguyên liệu này!',
+                    style: GoogleFonts.inter(color: kColorError, fontSize: 13),
+                  ),
+                );
+              },
               suggestionsCallback: (pattern) async {
                 if (pattern.length < 2) return [];
                 return await RecipeService.searchMasterIngredients(pattern);
@@ -806,27 +864,53 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
                 );
               },
               onSelected: (suggestion) {
-                rowController.name.text = suggestion['name'];
+                setState(() {
+                  rowController.name.text = suggestion['name'];
+                  rowController.isVerified = true;
+                });
+                _resetNutritionStatus();
               },
               builder: (context, controller, focusNode) {
+                // Xác định nếu user đã nhập text nhưng isVerified = false (lỗi)
+                bool hasError = controller.text.isNotEmpty && !rowController.isVerified;
+
                 return TextField(
                   controller: controller,
                   focusNode: focusNode,
-                  // Khi user sửa tên -> reset trạng thái AI
-                  onChanged: (_) => _resetNutritionStatus(),
+                  onChanged: (val) {
+                    setState(() {
+                      rowController.isVerified = false;
+                    });
+                    _resetNutritionStatus();
+                  },
                   decoration: InputDecoration(
                     labelText: 'Tên nguyên liệu',
                     hintText: 'VD: Thịt gà',
                     filled: true,
-                    fillColor: kColorCard,
+                    // Nếu lỗi thì nền đổi sang màu đỏ nhạt để cảnh báo
+                    fillColor: hasError ? kColorError.withOpacity(0.05) : kColorCard,
                     contentPadding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 12),
+                    // Bo viền đỏ nếu lỗi
                     border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: kColorBorder)),
+                        borderSide: BorderSide(
+                            color: hasError ? kColorError : kColorBorder, 
+                            width: hasError ? 1.5 : 1)),
                     enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: kColorBorder)),
+                        borderSide: BorderSide(
+                            color: hasError ? kColorError : kColorBorder, 
+                            width: hasError ? 1.5 : 1)),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                            color: hasError ? kColorError : kColorPrimary, 
+                            width: 2)),
+                    // Hiện icon đỏ báo lỗi
+                    suffixIcon: hasError 
+                        ? const Icon(Icons.error_outline, color: kColorError, size: 20) 
+                        : null,
                   ),
                 );
               },
@@ -846,19 +930,66 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
               child: _buildTextField(
                   controller: rowController.quantity,
                   label: 'SL',
-                  hint: '200',
+                  hint: '1',
                   keyboardType: TextInputType.number,
-                  // Khi user sửa SL -> reset trạng thái AI
                   onChanged: (_) => _resetNutritionStatus())),
           const SizedBox(width: 8),
           Expanded(
               flex: 2,
               child: _buildTextField(
-                  controller: rowController.unit,
-                  label: 'Đơn vị',
-                  hint: 'g',
-                  // Khi user sửa Unit -> reset trạng thái AI
+                  controller: rowController.weight,
+                  label: 'Khối lượng',
+                  hint: '200',
+                  keyboardType: TextInputType.number,
                   onChanged: (_) => _resetNutritionStatus())),
+          const SizedBox(width: 8),
+
+          // --- DROPDOWN ĐƠN VỊ KÍCH THƯỚC NHỎ ---
+          SizedBox(
+            width: 85,
+            child: DropdownButtonFormField<String>(
+              isExpanded: true,
+              icon: const Icon(Icons.arrow_drop_down, size: 20),
+              value: kUnitOptions.contains(rowController.unit.text)
+                  ? rowController.unit.text
+                  : null,
+              decoration: InputDecoration(
+                labelText: 'Đơn vị',
+                filled: true,
+                fillColor: kColorCard,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: kColorBorder)),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: kColorBorder)),
+              ),
+              items: kUnitOptions.map((String unit) {
+                return DropdownMenuItem<String>(
+                  value: unit,
+                  child: Text(unit, style: const TextStyle(fontSize: 13)),
+                );
+              }).toList(),
+              selectedItemBuilder: (BuildContext context) {
+                return kUnitOptions.map((String unit) {
+                  return Text(
+                    unit,
+                    style: const TextStyle(fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                  );
+                }).toList();
+              },
+              onChanged: (String? newValue) {
+                if (newValue != null) {
+                  rowController.unit.text = newValue;
+                  _resetNutritionStatus();
+                }
+              },
+            ),
+          ),
+
           if (_ingredientRows.length > 1)
             IconButton(
               icon: const Icon(Icons.remove_circle, color: kColorError),
@@ -877,10 +1008,12 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
       children: [
         OutlinedButton.icon(
           onPressed: _analyzeNutrition,
-          icon: Icon(Icons.analytics_outlined, 
+          icon: Icon(Icons.analytics_outlined,
               color: _isNutritionAnalyzed ? kColorPrimary : kColorSecondary),
           label: Text(
-              _isNutritionAnalyzed ? 'Đã phân tích (Nhấn để làm lại)' : 'Phân tích Dinh dưỡng (AI)',
+              _isNutritionAnalyzed
+                  ? 'Đã phân tích (Nhấn để làm lại)'
+                  : 'Phân tích Dinh dưỡng (AI)',
               style: TextStyle(
                   color: _isNutritionAnalyzed ? kColorPrimary : kColorSecondary,
                   fontWeight: FontWeight.bold)),
@@ -953,8 +1086,8 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
                     children: [
                       _buildNutritionRow('Đường',
                           _nutritionData!['sugars'] ?? 0, 'g', servings),
-                      _buildNutritionRow('Muối',
-                          _nutritionData!['sodium'] ?? 0, 'mg', servings),
+                      _buildNutritionRow('Muối', _nutritionData!['sodium'] ?? 0,
+                          'mg', servings),
                     ],
                   ),
                 ),
@@ -976,8 +1109,7 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
           Expanded(
               flex: 3,
               child: Text('Tổng (Nồi)',
-                  style: TextStyle(
-                      color: kColorSecondaryText, fontSize: 12),
+                  style: TextStyle(color: kColorSecondaryText, fontSize: 12),
                   textAlign: TextAlign.right)),
           Expanded(
               flex: 3,
@@ -1004,8 +1136,8 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
         children: [
           Expanded(
             flex: 4,
-            child: Text(label,
-                style: const TextStyle(color: kColorSecondaryText)),
+            child:
+                Text(label, style: const TextStyle(color: kColorSecondaryText)),
           ),
           Expanded(
             flex: 3,
@@ -1026,18 +1158,32 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
   }
 
   Widget _buildPieChart() {
-    double protein = (_nutritionData!['protein'] as num?)?.toDouble() ?? 0;
-    double carbs = (_nutritionData!['carbs'] as num?)?.toDouble() ?? 0;
-    double fat = (_nutritionData!['fat'] as num?)?.toDouble() ?? 0;
+    double safeParse(dynamic value) {
+      if (value == null) return 0;
+      if (value is num) return value.toDouble();
+      return double.tryParse(value.toString()) ?? 0;
+    }
+
+    double protein = safeParse(_nutritionData!['protein']);
+    double carbs = safeParse(_nutritionData!['carbs']);
+    double fat = safeParse(_nutritionData!['fat']);
+
     double total = protein + carbs + fat;
-    
+
     if (total <= 0) {
-       return PieChart(
-        PieChartData(
-          sections: [PieChartSectionData(value: 1, color: Colors.grey.shade300, radius: 50, title: '')],
-          centerSpaceRadius: 40,
-        )
-       );
+      return PieChart(PieChartData(
+        sectionsSpace: 0,
+        centerSpaceRadius: 40,
+        sections: [
+          PieChartSectionData(
+            value: 100,
+            color: Colors.grey.shade300,
+            radius: 50,
+            title: '',
+            showTitle: false,
+          ),
+        ],
+      ));
     }
 
     return PieChart(
@@ -1046,11 +1192,29 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
         centerSpaceRadius: 40,
         sections: [
           PieChartSectionData(
-              value: protein, color: kColorProtein, title: '', radius: 50),
+            value: protein,
+            color: kColorProtein,
+            title: '${((protein / total) * 100).toStringAsFixed(0)}%',
+            radius: 50,
+            titleStyle: const TextStyle(
+                fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
           PieChartSectionData(
-              value: carbs, color: kChartCarbs, title: '', radius: 50),
+            value: carbs,
+            color: kChartCarbs,
+            title: '${((carbs / total) * 100).toStringAsFixed(0)}%',
+            radius: 50,
+            titleStyle: const TextStyle(
+                fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
           PieChartSectionData(
-              value: fat, color: kChartFat, title: '', radius: 50),
+            value: fat,
+            color: kChartFat,
+            title: '${((fat / total) * 100).toStringAsFixed(0)}%',
+            radius: 50,
+            titleStyle: const TextStyle(
+                fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
         ],
       ),
     );
@@ -1083,14 +1247,14 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
       int? minLines = 1,
       int? maxLines = 1,
       TextInputAction? textInputAction,
-      Function(String)? onChanged}) { // Thêm callback onChanged
+      Function(String)? onChanged}) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       minLines: minLines,
       maxLines: maxLines,
       textInputAction: textInputAction,
-      onChanged: onChanged, // Gắn vào đây
+      onChanged: onChanged,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
@@ -1116,13 +1280,8 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
       required String? value,
       required Function(String?) onChanged}) {
     return DropdownButtonFormField<String>(
-      value: value,
-      items: items
-          .map((e) => DropdownMenuItem(
-              value: e,
-              child: Text(e, style: const TextStyle(fontSize: 14))))
-          .toList(),
-      onChanged: onChanged,
+      isExpanded: true,
+      value: items.contains(value) ? value : null,
       decoration: InputDecoration(
           labelText: label,
           filled: true,
@@ -1132,6 +1291,22 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
           border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: kColorBorder))),
+      items: items
+          .map((e) => DropdownMenuItem(
+                value: e,
+                child: Text(e, style: const TextStyle(fontSize: 14)),
+              ))
+          .toList(),
+      selectedItemBuilder: (BuildContext context) {
+        return items.map((String e) {
+          return Text(
+            e,
+            style: const TextStyle(fontSize: 14),
+            overflow: TextOverflow.ellipsis,
+          );
+        }).toList();
+      },
+      onChanged: onChanged,
     );
   }
 
@@ -1159,10 +1334,9 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
         const SizedBox(width: 12),
         Expanded(
           child: ElevatedButton(
-            onPressed: _submitRecipe, // Kiểm tra logic ở đây
+            onPressed: _submitRecipe,
             style: ElevatedButton.styleFrom(
-                minimumSize: const Size(0, 50),
-                backgroundColor: kColorPrimary),
+                minimumSize: const Size(0, 50), backgroundColor: kColorPrimary),
             child: const Text('Đăng công thức',
                 style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),

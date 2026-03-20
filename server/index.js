@@ -11,6 +11,7 @@ const connectDB = require('./config/db');
 const userRoute = require('./routes/user/user.route');
 const scanRoute = require('./routes/user/scan.route');
 const recipeRoute = require('./routes/user/recipe.route');
+const utilRoutes = require('./routes/user/util.route');
 const adminRoute = require('./routes/admin/index.js'); // Nên đặt biến cho đồng bộ
 
 // 3. KHỞI TẠO APP & CONFIG
@@ -46,6 +47,7 @@ app.use('/api/admin', adminRoute);
 app.use('/api/auth', userRoute);
 app.use('/api', scanRoute); // Lưu ý: route này hơi chung chung, nên là /api/scan nếu có thể
 app.use('/api/recipes', recipeRoute);
+app.use('/api/utils', utilRoutes);
 
 // 7. START SERVER
 app.listen(PORT, () => {

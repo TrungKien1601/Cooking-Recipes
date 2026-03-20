@@ -1,15 +1,15 @@
 const mongoose = require('mongoose');
 
 const collectionSchema = new mongoose.Schema({
-  name: { type: String, required: true },
   owner: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    unique: true 
   },
   recipes: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Recipe' // [cite: 55]
+    ref: 'Recipe'
   }]
 }, { timestamps: true });
 

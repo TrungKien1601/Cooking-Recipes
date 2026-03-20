@@ -15,8 +15,11 @@ class IngredientScannerScreen extends StatefulWidget {
 class _IngredientScannerScreenState extends State<IngredientScannerScreen> {
   final ImagePicker _picker = ImagePicker();
   bool _isAnalyzing = false;
+  
+  // Theme Colors
   final Color kBgColor = const Color(0xFF151522);
   final Color kPrimaryColor = const Color(0xFF568C4C);
+  final Color kColorSecondaryText = const Color(0xFF57636C);
 
   // Hàm chọn ảnh và gọi API ngay lập tức
   Future<void> _pickAndAnalyze(ImageSource source) async {
@@ -38,16 +41,30 @@ class _IngredientScannerScreenState extends State<IngredientScannerScreen> {
 
         if (result['success'] == true) {
           if (!mounted) return;
-          // --- CHUYỂN SANG TRANG KẾT QUẢ ---
-          Navigator.push(
+          
+          // Chuẩn hóa dữ liệu an toàn
+          final List<dynamic> rawData = result['data'] ?? [];
+          final List<Map<String, dynamic>> ingredients = rawData.map((e) => Map<String, dynamic>.from(e)).toList();
+
+          // 1. Chờ trang xác nhận trả về kết quả (true/false)
+          final bool? isSaved = await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => IngredientIdentifyScreen(
                 imageFile: File(pickedFile.path),
-                detectedIngredients: result['data'], // Truyền dữ liệu qua
+                initialIngredients: ingredients, // Dùng biến đã chuẩn hóa ở trên cho gọn
               ),
             ),
           );
+
+          // 🔥 BỔ SUNG ĐOẠN NÀY (QUAN TRỌNG NHẤT) 🔥
+          // 2. Nếu trang xác nhận báo là "Đã lưu" (true)
+          if (isSaved == true) {
+            if (!mounted) return;
+            // Đóng màn hình Scanner này lại và báo tin vui về cho Pantry
+            Navigator.pop(context, true); 
+          }
+          
         } else {
           _showError(result['message'] ?? "Lỗi phân tích ảnh");
         }
@@ -59,17 +76,18 @@ class _IngredientScannerScreenState extends State<IngredientScannerScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.redAccent));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kBgColor,
+      backgroundColor: kBgColor, // Đổi sang màu tối cho đẹp
       appBar: AppBar(
         backgroundColor: kBgColor,
         leading: const BackButton(color: Colors.white),
-        title: Text("Soi Thực Phẩm", style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text("Soi Thực Phẩm AI", style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold)),
         centerTitle: true,
         elevation: 0,
       ),

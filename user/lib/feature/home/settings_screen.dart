@@ -59,7 +59,7 @@ class SettingsScreen extends StatelessWidget {
       ),
       // Tiêu đề chuẩn
       title: Text(
-        'Settings',
+        'Cài đặt',
         style: GoogleFonts.interTight(
           color: Colors.white, // Đổi thành màu trắng
           fontSize: 22.0, // Ước tính từ 'titleLarge'
@@ -102,7 +102,7 @@ class SettingsScreen extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(left: 8.0, bottom: 16.0),
           child: Text(
-            'Account',
+            'Tài khoản',
             style: GoogleFonts.interTight(
               color: secondaryText,
               fontSize: 18.0,
@@ -122,7 +122,7 @@ class SettingsScreen extends StatelessWidget {
               _buildSettingsItem(
                 context,
                 icon: Icons.person_outline,
-                title: "User Profile",
+                title: "Thông tin cá nhân",
                 subtitle: "Edit your profile and survey data",
                 showArrow: true,
                 onTap: () {
@@ -150,7 +150,7 @@ class SettingsScreen extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(left: 8.0, bottom: 16.0),
           child: Text(
-            'Information',
+            'Thông tin ứng dụng',
             style: GoogleFonts.interTight(
               color: secondaryText,
               fontSize: 18.0,
@@ -169,7 +169,7 @@ class SettingsScreen extends StatelessWidget {
               _buildSettingsItem(
                 context,
                 icon: Icons.add_circle_outline,
-                title: "Add Recipe",
+                title: "Thêm công thức",
                 showArrow: true,
                 onTap: () {
                   Navigator.push(
@@ -182,7 +182,7 @@ class SettingsScreen extends StatelessWidget {
               _buildSettingsItem(
                 context,
                 icon: Icons.bookmark_border,
-                title: "Bookmark",
+                title: "Bộ sưu tập",
                 showArrow: true,
                 onTap: () {
                   Navigator.push(
@@ -195,7 +195,7 @@ class SettingsScreen extends StatelessWidget {
               _buildSettingsItem(
                 context,
                 icon: Icons.privacy_tip_outlined,
-                title: "Privacy & Policy",
+                title: "Chính sách và dieu khoản",
                 showArrow: true,
                 onTap: () {
                   Navigator.push(
@@ -208,7 +208,7 @@ class SettingsScreen extends StatelessWidget {
               _buildSettingsItem(
                 context,
                 icon: Icons.info_outline,
-                title: "About Us",
+                title: "Về chúng tôi",
                 showArrow: true,
                 onTap: () {
                   Navigator.push(
@@ -221,7 +221,7 @@ class SettingsScreen extends StatelessWidget {
               _buildSettingsItem(
                 context,
                 icon: Icons.contact_mail_outlined,
-                title: "Contact Us",
+                title: "Liên hệ",
                 showArrow: true,
                 onTap: () {
                   Navigator.push(
@@ -245,7 +245,7 @@ class SettingsScreen extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(left: 8.0, bottom: 16.0),
           child: Text(
-            'Account & Security',
+            'Tài khoản và bảo mật',
             style: GoogleFonts.interTight(
               color: secondaryText,
               fontSize: 18.0,
@@ -265,7 +265,7 @@ class SettingsScreen extends StatelessWidget {
               _buildSettingsItem(
                 context,
                 icon: Icons.logout,
-                title: "Log Out",
+                title: "Đăng xuất tài khoản",
                 subtitle: "Sign out of your account",
                 iconColor: warningColor,
                 titleColor: warningColor,

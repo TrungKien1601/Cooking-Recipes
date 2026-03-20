@@ -1,26 +1,54 @@
+import { useEffect, useState } from "react";
 import Chart from "react-apexcharts";
+import axios from "axios";
 
 export default function StatisticsChart() {
+  const token = localStorage.getItem('admin_token') || sessionStorage.getItem('admin_token');
+  const [chartData, setChartData] = useState({
+    users: [],
+    recipes: []
+  });
+  const [loading, setLoading] = useState(true);
+
+  // Gọi API lấy dữ liệu biểu đồ
+  useEffect(() => {
+    const fetchChartData = async () => {
+      try {
+         const config = { headers: { "x-access-token" : token }};
+        
+        const res = await axios.get('/api/admin/dashboard/chart', config);
+
+        if (res.data.success) {
+          setChartData(res.data.data);
+        }
+      } catch (error) {
+        console.error("Lỗi tải biểu đồ:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchChartData();
+  }, []);
+
+  // Cấu hình Chart
   const options = {
     legend: {
-      show: false, // Hide legend
+      show: true,
       position: "top",
       horizontalAlign: "left",
     },
-    colors: ["#465FFF", "#9CB9FF"], // Define line colors
+    colors: ["#465FFF", "#0baf42"], // Màu Xanh đậm (User), Xanh nhạt (Recipe)
     chart: {
       fontFamily: "Outfit, sans-serif",
       height: 310,
-      type: "line", // Set the chart type to 'line'
-      toolbar: {
-        show: false, // Hide chart toolbar
-      },
+      type: "area", // Đổi thành Area cho đẹp hơn Line
+      toolbar: { show: false },
     },
     stroke: {
-      curve: "smooth", // Define the line style (straight, smooth, or step)
-      width: [2, 2], // Line width for each dataset
+      curve: "smooth",
+      width: [2, 2],
     },
-
     fill: {
       type: "gradient",
       gradient: {
@@ -28,105 +56,49 @@ export default function StatisticsChart() {
         opacityTo: 0,
       },
     },
-    markers: {
-      size: 3, // Size of the marker points
-      strokeColors: "#fff", // Marker border color
-      strokeWidth: 2,
-      hover: {
-        size: 6, // Marker size on hover
-      },
-    },
+    markers: { size: 4, strokeColors: "#fff", strokeWidth: 2, hover: { size: 6 } },
     grid: {
-      xaxis: {
-        lines: {
-          show: false, // Hide grid lines on x-axis
-        },
-      },
-      yaxis: {
-        lines: {
-          show: true, // Show grid lines on y-axis
-        },
-      },
+      xaxis: { lines: { show: false } },
+      yaxis: { lines: { show: true } },
     },
-    dataLabels: {
-      enabled: false, // Disable data labels
-    },
-    tooltip: {
-      enabled: true, // Enable tooltip
-      x: {
-        format: "dd MMM yyyy", // Format for x-axis tooltip
-      },
-    },
+    dataLabels: { enabled: false },
+    tooltip: { enabled: true },
     xaxis: {
-      type: "category", // Category-based x-axis
+      type: "category",
       categories: [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
+        "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6",
+        "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12",
       ],
-      axisBorder: {
-        show: false, // Hide x-axis border
-      },
-      axisTicks: {
-        show: false, // Hide x-axis ticks
-      },
-      tooltip: {
-        enabled: false, // Disable tooltip for x-axis points
-      },
+      axisBorder: { show: false },
+      axisTicks: { show: false },
     },
     yaxis: {
-      labels: {
-        style: {
-          fontSize: "12px", // Adjust font size for y-axis labels
-          colors: ["#6B7280"], // Color of the labels
-        },
-      },
-      title: {
-        text: "", // Remove y-axis title
-        style: {
-          fontSize: "0px",
-        },
-      },
+      labels: { style: { fontSize: "12px", colors: ["#6B7280"] } },
     },
   };
 
+  // Dữ liệu hiển thị (Series)
   const series = [
     {
-      name: "Tổng tháng",
-      data: [180, 190, 170, 160, 175, 165, 170, 205, 230, 210, 240, 235],
+      name: "Người dùng mới",
+      data: loading ? Array(12).fill(0) : chartData.users, // Dữ liệu từ API
     },
     {
-      name: "Trung bình tháng",
-      data: [40, 30, 50, 40, 55, 40, 70, 100, 110, 120, 150, 140],
+      name: "Công thức mới",
+      data: loading ? Array(12).fill(0) : chartData.recipes, // Dữ liệu từ API
     },
   ];
+
   return (
     <div className="rounded-2xl border border-gray-200 bg-white px-5 pb-5 pt-5 dark:border-gray-800 dark:bg-white/[0.03] sm:px-6 sm:pt-6">
       <div className="flex flex-col gap-5 mb-6 sm:flex-row sm:justify-between">
         <div className="w-full">
           <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-            Số người dùng online trong tháng
+            Tăng trưởng nội dung & Người dùng
           </h3>
           <p className="mt-1 text-gray-500 text-theme-sm dark:text-gray-400">
-            So sánh số người dùng online trung bình và tổng trong tháng
+            Thống kê số lượng tạo mới theo từng tháng trong năm nay
           </p>
-        </div>
-        <div className="flex items-start w-full gap-3 sm:justify-end">
-          <div className="flex items-center gap-0.5 rounded-lg bg-gray-100 p-0.5 dark:bg-gray-900">
-            <button
-              className={`px-3 py-2 font-medium w-full rounded-md text-theme-sm hover:text-gray-900   dark:hover:text-white shadow-theme-xs text-gray-900 dark:text-white bg-white dark:bg-gray-800`}>
-              Monthly
-            </button>
-          </div>
         </div>
       </div>
 

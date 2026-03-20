@@ -184,9 +184,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // --- HEADER ---
-                  Text('Login', style: GoogleFonts.interTight(fontSize: 32.0, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  Text('Đăng nhập', style: GoogleFonts.interTight(fontSize: 32.0, fontWeight: FontWeight.bold, color: Colors.black87)),
                   const SizedBox(height: 16),
-                  Text('Welcome back! Please enter your details.', style: GoogleFonts.inter(fontSize: 16.0, color: secondaryTextColor)),
+                  Text('Chào mừng, vui lòng nhập thông tin của bạn.', style: GoogleFonts.inter(fontSize: 16.0, color: secondaryTextColor)),
                   const SizedBox(height: 40),
   
                   // Email Field
@@ -194,7 +194,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
                     decoration: InputDecoration(
-                      labelText: 'Email', hintText: 'Enter your email...', labelStyle: GoogleFonts.inter(color: secondaryTextColor),
+                      labelText: 'Email', hintText: 'Nhập email của bạn...', labelStyle: GoogleFonts.inter(color: secondaryTextColor),
                       filled: true, fillColor: whiteColor, prefixIcon: Icon(Icons.email_outlined, color: secondaryTextColor),
                       enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: textFieldBorderColor, width: 2.0), borderRadius: BorderRadius.circular(12.0)),
                       focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: primaryColor, width: 2.0), borderRadius: BorderRadius.circular(12.0)),
@@ -208,7 +208,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _passwordController,
                     obscureText: !_passwordVisible,
                     decoration: InputDecoration(
-                      labelText: 'Password', hintText: 'Enter your password...', labelStyle: GoogleFonts.inter(color: secondaryTextColor),
+                      labelText: 'Mật khẩu', hintText: 'Nhập mật khẩu của bạn...', labelStyle: GoogleFonts.inter(color: secondaryTextColor),
                       filled: true, fillColor: whiteColor, prefixIcon: Icon(Icons.lock_outline, color: secondaryTextColor),
                       suffixIcon: IconButton(
                         icon: Icon(_passwordVisible ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: secondaryTextColor),
@@ -226,7 +226,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     alignment: Alignment.centerRight,
                     child: InkWell(
                       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ForgotPasswordScreen())),
-                      child: Text('Forgot Password?', style: GoogleFonts.inter(color: primaryColor, fontWeight: FontWeight.w600, fontSize: 14.0)),
+                      child: Text('Quên mật khẩu?', style: GoogleFonts.inter(color: primaryColor, fontWeight: FontWeight.w600, fontSize: 14.0)),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -242,7 +242,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       elevation: 3.0,
                     ),
                     child: Text(
-                      'Login',
+                      'Đăng nhập',
                       style: GoogleFonts.inter(fontSize: 16.0, fontWeight: FontWeight.w600),
                     ),
                   ),
@@ -291,10 +291,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('Don\'t have an account?  ', style: GoogleFonts.inter(color: secondaryTextColor)),
+                      Text('bạn chưa có tài khoản ?  ', style: GoogleFonts.inter(color: secondaryTextColor)),
                       InkWell(
                         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SignUpScreen())),
-                        child: Text('Sign Up', style: GoogleFonts.inter(color: primaryColor, fontWeight: FontWeight.w600)),
+                        child: Text('Đăng ký', style: GoogleFonts.inter(color: primaryColor, fontWeight: FontWeight.w600)),
                       ),
                     ],
                   ),

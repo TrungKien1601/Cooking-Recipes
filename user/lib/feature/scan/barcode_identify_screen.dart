@@ -122,8 +122,6 @@ class _BarcodeResultScreenState extends State<BarcodeResultScreen> {
       weightToSend = quantityInput * 1000;
       totalCal = (baseCal / 100) * weightToSend;
     } else {
-      // Đơn vị đếm (Gói, hộp...) -> Giả định 1 gói chuẩn (ví dụ 100g) hoặc user tự chịu trách nhiệm
-      // Backend sẽ dùng quantityInput làm 'amount'
       totalCal =
           baseCal * quantityInput; // Tạm tính: 1 gói = 100g chuẩn của API
     }

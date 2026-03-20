@@ -7,10 +7,10 @@ export default function BasicTables() {
   return (
     <>
       <PageMeta
-        title="Nguyên liệu"
-        description="Trang nguyên liệu"
+        title="Thẻ"
+        description="Trang quản lý thẻ"
       />
-      <PageBreadcrumb pageTitle="Nguyên liệu" />
+      <PageBreadcrumb pageTitle="Thẻ" />
       <div className="space-y-6">
         <Tags />
       </div>

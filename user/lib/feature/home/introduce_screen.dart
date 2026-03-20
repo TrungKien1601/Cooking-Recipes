@@ -93,7 +93,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       backgroundColor: kOnboardingBackground,
       elevation: 0,
       title: Text(
-        'CookBook', // Tên App thường giữ nguyên tiếng Anh
+        'CookingRecipes', // Tên App thường giữ nguyên tiếng Anh
         style: GoogleFonts.interTight(
           color: kOnboardingPrimaryText,
           fontWeight: FontWeight.bold,
@@ -101,36 +101,37 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
       ),
       centerTitle: true,
-      actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 8.0),
-          child: IconButton(
-            onPressed: () {
-              // Placeholder: language switching is disabled in this build
-              showDialog(
-                context: context,
-                builder: (_) => AlertDialog(
-                  title: const Text('Language'),
-                  content: const Text('Language switching is disabled in this build.'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
-                  ],
-                ),
-              );
-            },
-            icon: const Icon(Icons.language, color: Colors.black),
-            tooltip: 'Language',
-          ),
-        ),
-      ],
+      // actions: [
+      //   Padding(
+      //     padding: const EdgeInsets.only(right: 8.0),
+      //     child: IconButton(
+      //       onPressed: () {
+      //         // Placeholder: language switching is disabled in this build
+      //         showDialog(
+      //           context: context,
+      //           builder: (_) => AlertDialog(
+      //             title: const Text('Language'),
+      //             content: const Text('Language switching is disabled in this build.'),
+      //             actions: [
+      //               TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+      //             ],
+      //           ),
+      //         );
+      //       },
+      //       icon: const Icon(Icons.language, color: Colors.black),
+      //       tooltip: 'Language',
+      //     ),
+      //   ),
+      // ],
     );
   }
 
   // Trang 1
   Widget _buildPage1(BuildContext context) {
     // Local fallback strings (AppLocalizations not available)
-    const String onboardingTitle1 = 'Discover recipes from around the world';
-    const String onboardingDesc1 = 'Find, save and cook delicious recipes tailored for you.';
+    const String onboardingTitle1 = 'Khám phá ẩm thực Việt Nam khắp các vùng miền';
+    const String onboardingDesc1 = 'Tìm, Lưu những công thức ngon dành cho riêng bạn. '
+        'Chia sẻ món ăn yêu thích với cộng đồng CookBook.';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
@@ -165,8 +166,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   // Trang 2
   Widget _buildPage2(BuildContext context) {
     // Local fallback strings
-    const String onboardingTitle2 = 'Personalized meal recommendations';
-    const String onboardingDesc2 = 'Get meal plans, nutrition info and step-by-step guides.';
+    const String onboardingTitle2 = 'Gợi ý những món ăn phù hợp với bạn';
+    const String onboardingDesc2 = 'Hay đổi khẩu vị mỗi ngày với các đề xuất món ăn '
+        'được cá nhân hóa dựa trên sở thích và thói quen của bạn.';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
@@ -199,8 +201,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   // Thanh điều hướng dưới cùng
   Widget _buildBottomControls(BuildContext context) {
-    const String loginLabel = 'Login';
-    const String nextLabel = 'Next';
+    const String loginLabel = 'Đăng nhập';
+    const String nextLabel = 'Tiếp tục';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(24.0, 16.0, 24.0, 24.0),
