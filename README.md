@@ -11,13 +11,13 @@
 * 💡 **Gợi ý món ăn siêu tốc:** Tự động đề xuất thực đơn 5 món dựa trên chính xác những nguyên liệu bạn đang có trong tủ lạnh.
 * 📚 **Cộng đồng chia sẻ:** Đăng tải, duyệt và chia sẻ công thức nấu ăn với cộng đồng.
 * 📊 **Tính toán dinh dưỡng:** Tự động tính toán lượng Calo và Macros (Protein, Carbs, Fat) cho từng khẩu phần ăn.
-* 📱 **Trải nghiệm mượt mà:** Tính năng cuộn vô hạn (Infinite Scrolling), đánh dấu lưu công thức (Bookmark) và xem lịch sử quét AI.
+* 📱 **Trải nghiệm mượt mà:**  Đánh dấu lưu công thức (Bookmark) và xem lịch sử quét AI.
 
 ## 🛠 Công nghệ sử dụng
 
 **Frontend (Mobile App):**
 * [Flutter](https://flutter.dev/) & Dart
-* Quản lý State: (Điền state management bạn dùng, vd: Provider / GetX / setState)
+* Quản lý State: Provider
 * Packages: `http`, `shared_preferences`, `google_fonts`...
 
 **Backend (API Server):**
